@@ -166,6 +166,7 @@ Get-Content "$env:LOCALAPPDATA\Logi\LogiPluginService\Logs\plugin_logs\WorkHealt
 ```
 - `LocalServer listening on http://127.0.0.1:8787/` = OK, the plugin runs.
 - `LocalServer could not start ...` = port 8787 is used by another program: `netstat -ano | findstr 8787`.
+- The log stops after `Started loading plugin 'WorkHealthCoach'` and nothing follows = the service could not find the plugin files. Fixed on 2026-11-21 (`pluginFolderWin: bin` was missing in `LoupedeckPackage.yaml`): `git pull`, `dotnet build -c Debug`, restart the Plugin Service.
 - No `WorkHealthCoach.log` file at all = the Plugin Service never loaded it. Usually Logi Options+ is too old: the plugin needs
   **Logi Plugin Service 6.4 or newer (.NET 10)**. Update Logi Options+ (Settings -> About / check for updates) and restart the service.
   Check the version: `(Get-Item "C:\Program Files\Logi\LogiPluginService\PluginApi.dll").VersionInfo.FileVersion`
