@@ -20,6 +20,24 @@ namespace Loupedeck.WorkHealthCoachPlugin
     {
         public const Int32 Port = 8787;
 
+        // When this plugin was built (stamped by MSBuild). Shown by /health and in the log, so a stale build is easy to
+        // spot: on Windows a still-loaded DLL can make `dotnet build` leave the old plugin running.
+        public static readonly String BuildStamp = ReadBuildStamp();
+
+        private static String ReadBuildStamp()
+        {
+            try
+            {
+                var attr = typeof(LocalServer).Assembly
+                    .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false);
+                return attr.Length > 0 ? ((System.Reflection.AssemblyInformationalVersionAttribute)attr[0]).InformationalVersion : "unknown";
+            }
+            catch
+            {
+                return "unknown";
+            }
+        }
+
         private TcpListener _listener;
         private CancellationTokenSource _cts;
 
@@ -31,7 +49,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 this._listener = new TcpListener(IPAddress.Loopback, Port);
                 this._listener.Start();
                 _ = Task.Run(() => this.AcceptLoopAsync(this._cts.Token));
-                PluginLog.Info($"LocalServer listening on http://127.0.0.1:{Port}/");
+                PluginLog.Info($"LocalServer listening on http://127.0.0.1:{Port}/ (plugin build {BuildStamp})");
             }
             catch (Exception ex)
             {
@@ -104,7 +122,9 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     var head = Encoding.ASCII.GetString(ms.GetBuffer(), 0, headerEnd).Split("\r\n");
                     var request = head[0].Split(' ');
                     var method = request[0];
-                    var path = request.Length > 1 ? request[1].Split('?')[0].TrimEnd('/') : String.Empty;
+                    var target = request.Length > 1 ? request[1] : String.Empty;
+                    var path = target.Split('?')[0].TrimEnd('/');
+                    var query = target.Contains('?') ? target.Substring(target.IndexOf('?') + 1) : String.Empty;
                     var length = 0;
                     foreach (var line in head.Skip(1))
                     {
@@ -136,7 +156,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     (Int32 status, String json) result;
                     try
                     {
-                        result = Route(method, path, Encoding.UTF8.GetString(body.ToArray()));
+                        result = Route(method, path, query, Encoding.UTF8.GetString(body.ToArray()));
                     }
                     catch (JsonException)
                     {
@@ -185,13 +205,13 @@ namespace Loupedeck.WorkHealthCoachPlugin
             return -1;
         }
 
-        private static (Int32 status, String json) Route(String method, String path, String body)
+        private static (Int32 status, String json) Route(String method, String path, String query, String body)
         {
             const String Ok = "{\"ok\":true}";
 
             if (method == "GET" && path == "/health")
             {
-                return (200, Ok);
+                return (200, $"{{\"ok\":true,\"build\":\"{BuildStamp}\"}}");
             }
 
             if (method == "GET" && path == "/overlay")
@@ -259,7 +279,80 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 return (200, Ok);
             }
 
+            // Simplest interface: a plain True/False.
+            //   GET or POST /pace/true            == "speech is too fast"     (/pace/false = "pace is fine again")
+            //   GET or POST /signal/<trigger>/true | false      e.g. /signal/blink_low/true
+            // optional query: ?severity=0.8   ?force=1 (development: skip the notification policy)
+            if (method == "GET" || method == "POST")
+            {
+                var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                String name = null;
+                String value = null;
+                if (parts.Length == 2 && parts[0] == "pace")
+                {
+                    (name, value) = ("pace_too_fast", parts[1]);
+                }
+                else if (parts.Length == 3 && parts[0] == "signal")
+                {
+                    (name, value) = (parts[1], parts[2]);
+                }
+
+                if (name != null)
+                {
+                    var on = ParseBool(value);
+                    if (on == null)
+                    {
+                        return (400, "{\"error\":\"use true or false\"}");
+                    }
+
+                    var q = ParseQuery(query);
+                    var severity = q.TryGetValue("severity", out var sv) && Double.TryParse(sv, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sd) ? sd : 1.0;
+                    var force = q.TryGetValue("force", out var fv) && ParseBool(fv) == true;
+
+                    if (on == true)
+                    {
+                        if (!Triggers.Alerts.Contains(name))
+                        {
+                            return (400, "{\"error\":\"unknown trigger\"}");
+                        }
+
+                        PluginLog.Info($"Signal TRUE: {name} severity={severity}{(force ? " FORCE" : String.Empty)}");
+                        TriggerBus.Publish(new TriggerMessage(name, severity, force));
+                    }
+                    else
+                    {
+                        var release = Triggers.ReleaseFor(name);
+                        PluginLog.Info($"Signal FALSE: {name}{(release != null ? $" -> {release}" : " (nothing to end)")}");
+                        if (release != null)
+                        {
+                            TriggerBus.Publish(new TriggerMessage(release, 1.0));
+                        }
+                    }
+
+                    return (200, Ok);
+                }
+            }
+
             return (404, "{\"error\":\"not found\"}");
+        }
+
+        private static Boolean? ParseBool(String v) => (v ?? String.Empty).Trim().ToLowerInvariant() switch
+        {
+            "true" or "1" or "yes" or "on" => true,
+            "false" or "0" or "no" or "off" => false,
+            _ => null,
+        };
+
+        private static System.Collections.Generic.Dictionary<String, String> ParseQuery(String query)
+        {
+            var d = new System.Collections.Generic.Dictionary<String, String>();
+            foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var kv = pair.Split('=', 2);
+                d[kv[0]] = kv.Length > 1 ? kv[1] : "true";
+            }
+
+            return d;
         }
     }
 }
@@ -278,5 +371,16 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public static IEnumerable<String> All => HapticPlayer.PatternNames.Concat(Controls);
 
         public static Boolean IsKnown(String name) => All.Contains(name);
+
+        // Real alerts (everything except the two control triggers).
+        public static IEnumerable<String> Alerts => HapticPlayer.PatternNames;
+
+        // What "false" means for an alert: the control trigger that ends it (or null: nothing to end).
+        public static String ReleaseFor(String alert) => alert switch
+        {
+            "pace_too_fast" => "pace_ok",
+            "blink_low" => "blink_detected",
+            _ => null,
+        };
     }
 }

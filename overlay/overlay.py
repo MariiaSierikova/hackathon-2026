@@ -24,6 +24,11 @@ SCALE = 6
 HEIGHT = 270
 
 
+def say(msg):
+    """Console log with a timestamp, so we can see what the overlay saw and did."""
+    print(time.strftime("[overlay %H:%M:%S] ") + msg, flush=True)
+
+
 def sprite_pixmap(name, frame, scale=SCALE):
     pal = {k: QtGui.QColor(*v) for k, v in SPRITES[name]["palette"].items()}
     rows = SPRITES[name]["frames"][frame]
@@ -67,6 +72,7 @@ class Overlay(QtWidgets.QWidget):
         self.setGeometry(g.x(), g.bottom() - HEIGHT + 1, g.width(), HEIGHT)
 
         self.animal, self.t0 = None, 0.0
+        self.plugin_down = False
         self.demo = demo
         self.excluded = False
         self.cache = {}
@@ -86,8 +92,15 @@ class Overlay(QtWidgets.QWidget):
                         d = json.loads(r.read())
                     if d["animal"] != self.animal:
                         self.t0 = time.time() - d["ageMs"] / 1000.0
+                        say(f"plugin says animal: {self.animal} -> {d['animal']}")
                     self.animal = d["animal"]
-            except Exception:
+                    if self.plugin_down:
+                        say("plugin reachable again")
+                        self.plugin_down = False
+            except Exception as e:
+                if not self.plugin_down:
+                    say(f"plugin NOT reachable ({e}); hiding. Is Logi Options+ running with the plugin?")
+                    self.plugin_down = True
                 self.animal = None          # plugin not running: stay invisible
             time.sleep(0.25)
 
@@ -102,10 +115,12 @@ class Overlay(QtWidgets.QWidget):
         if self.animal is None:
             if self.isVisible():
                 self.hide()
+                say("window hidden")
             return
         if not self.isVisible():
             self.show()
             self.raise_()
+            say(f"window shown ({self.animal})")
         if not self.excluded:
             exclude_from_capture(self)
             self.excluded = True

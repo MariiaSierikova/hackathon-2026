@@ -25,13 +25,22 @@ def mean_ear(landmarks):
 
 
 class BlinkDetector:
-    """Adaptive threshold: eye is 'closed' when EAR < ratio * recent open level."""
+    """Adaptive threshold: the eye is 'closed' when EAR < ratio * the recent eyes-open level.
 
-    def __init__(self, ratio=0.72, min_ms=40, max_ms=600, refractory_ms=180):
+    A blink only counts when the eye stayed closed for at least `min_samples` consecutive results and the dip was
+    deep (below depth_ratio * open level). That filters single noisy frames, which would otherwise count as blinks
+    and keep resetting the "no blink for N seconds" timer.
+    """
+
+    def __init__(self, ratio=0.72, min_ms=40, max_ms=600, refractory_ms=180, min_samples=2, depth_ratio=0.62):
         self.ratio, self.min_ms, self.max_ms, self.refractory_ms = ratio, min_ms, max_ms, refractory_ms
+        self.min_samples, self.depth_ratio = min_samples, depth_ratio
         self.history = collections.deque(maxlen=150)   # ~5 s of samples
         self.closed_since = None
+        self.closed_samples = 0
+        self.min_e = 1.0
         self.last_blink = 0.0
+        self.closed = False                             # state after the last update (for logging)
 
     def baseline(self):
         if len(self.history) < 20:
@@ -43,14 +52,21 @@ class BlinkDetector:
         """Feed one EAR sample. Returns the blink duration in ms when a blink just finished, else None."""
         base = self.baseline()
         closed = base is not None and e < base * self.ratio
+        self.closed = closed
         if not closed:
             self.history.append(e)                      # learn only from open-eye samples
-        if closed and self.closed_since is None:
-            self.closed_since = now
-        elif not closed and self.closed_since is not None:
+        if closed:
+            if self.closed_since is None:
+                self.closed_since, self.closed_samples, self.min_e = now, 0, e
+            self.closed_samples += 1
+            self.min_e = min(self.min_e, e)
+        elif self.closed_since is not None:
             dur = (now - self.closed_since) * 1000
+            deep = base is not None and self.min_e < base * self.depth_ratio
+            ok = (self.min_ms <= dur <= self.max_ms and self.closed_samples >= self.min_samples and deep
+                  and (now - self.last_blink) * 1000 >= self.refractory_ms)
             self.closed_since = None
-            if self.min_ms <= dur <= self.max_ms and (now - self.last_blink) * 1000 >= self.refractory_ms:
+            if ok:
                 self.last_blink = now
                 return dur
         return None
