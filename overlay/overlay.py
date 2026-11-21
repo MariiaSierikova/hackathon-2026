@@ -70,7 +70,7 @@ class Overlay(QtWidgets.QWidget):
         self.demo = demo
         self.excluded = False
         self.cache = {}
-        self.timer = QtCore.QTimer(self, interval=33, timeout=self.update)
+        self.timer = QtCore.QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
         threading.Thread(target=self.poll, daemon=True).start()
 
@@ -97,18 +97,25 @@ class Overlay(QtWidgets.QWidget):
             self.cache[key] = sprite_pixmap(name, frame)
         return self.cache[key]
 
-    # ---- drawing ----
-    def paintEvent(self, _):
-        animal = self.animal
-        if animal is None:
+    # ---- show / hide (a hidden window gets no paint events, so this must run from the timer) ----
+    def tick(self):
+        if self.animal is None:
             if self.isVisible():
                 self.hide()
             return
         if not self.isVisible():
             self.show()
+            self.raise_()
         if not self.excluded:
             exclude_from_capture(self)
             self.excluded = True
+        self.update()
+
+    # ---- drawing ----
+    def paintEvent(self, _):
+        animal = self.animal
+        if animal is None:
+            return
 
         age = time.time() - self.t0
         p = QtGui.QPainter(self)

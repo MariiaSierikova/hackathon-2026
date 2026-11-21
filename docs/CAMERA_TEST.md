@@ -1,56 +1,162 @@
-# Camera test: blink -> mouse buzz
+# Camera test on a clean Windows laptop
 
-Goal: prove the LogiInsight camera's own AI can drive a trigger. Each blink you make sends `test_blink`
-(one soft tap) to the plugin, so the MX Master 4 taps once per blink.
+**Goal:** prove that the LogiInsight camera's own AI can tell when you blink, and that each blink can drive our feedback
+(a tap on the MX Master 4).
 
-State found on this Mac: camera USB ("LVNext") and its network adapter (en9) are visible; the adapter only has a
-self-assigned `169.254.x.x` address, so the camera at `192.168.1.10` can't be reached yet. Wi-Fi is on a phone hotspot
-(`172.20.10.x`), so there is no `192.168.1.x` clash.
+**Why Windows:** on a Mac the camera only offers its infrared picture, and the face AI needs the colour picture
+(Logitech: colour does not work on Macs). On Windows both work.
 
-## 1. Give the camera adapter a fixed address (you, ~1 min)
-System Settings -> Network -> **LVNext** -> Details... -> TCP/IP -> *Configure IPv4:* **Manually**
-- IP address `192.168.1.20`, Subnet mask `255.255.255.0`, Router: **leave empty** -> OK.
-Check: `ping -c 2 192.168.1.10` answers.
+**Time:** about 20-30 minutes the first time (most of it is downloads). Words in `code style` are things you type or click.
 
-## 2. Allow Local Network for Terminal (you)
-System Settings -> Privacy & Security -> **Local Network** -> switch on the app you run commands from (Terminal / the Claude app).
-Also allow **Camera** for the same app when macOS asks.
+## What you need
+- The LogiInsight camera + its USB-C cable, plugged into a **USB 3** port (the blue or "SS" one is best), and the **card from the kit**
+  with the user name and password.
+- Windows 10 or 11 with internet, and Logi Options+ already installed.
+- **Part B only:** an MX Master 4 mouse connected to Options+ (the Keypad is optional). If you don't have the mouse, do Part A only.
 
-## 3. Save the camera login on this Mac (you, never in chat)
-Run this in Terminal and type the user name and password from the card in your kit when prompted
-(the password is not shown). It writes a private file outside the git repo:
-```bash
-mkdir -p ~/.config/workhealth && umask 077 && read "u?Camera user: " && read -s "p?Camera password: " && printf "LOGIWEBCAM_USER=%s\nLOGIWEBCAM_PASSWORD=%s\n" "$u" "$p" > ~/.config/workhealth/camera.env && unset u p && echo " saved"
+## Part A - the camera detects your blinks (no Logitech devices needed)
+
+### A1. Open PowerShell
+Press the Windows key, type `PowerShell`, press Enter. Use this one window for everything below.
+(If a step says "close and reopen PowerShell", do exactly that.)
+
+### A2. Install the three tools
+Copy each line, paste it, press Enter. Say yes to any agreement question.
+```powershell
+winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
+winget install --id astral-sh.uv -e --accept-package-agreements --accept-source-agreements
+winget install --id Microsoft.DotNet.SDK.10 -e --accept-package-agreements --accept-source-agreements
 ```
-
-## 4. Check the link
-```bash
-cd "/Users/imasha/Documents/Hackathon 2026/brain" && uv run python ../scripts/check_camera.py
+- **Git** downloads our project. **uv** installs the right Python (3.12) and our libraries by itself. **.NET 10** is only needed for Part B but takes a minute, so install it now.
+- Now **close PowerShell and open a new one** (so the new tools are found), then check:
+```powershell
+git --version
+uv --version
+dotnet --version
 ```
-Fix the first `[FAIL]` it prints (it tells you how).
+Each should print a version (`dotnet` should start with `10.`). If `winget` is not found, install "App Installer" from the Microsoft Store, or download the tools from
+https://git-scm.com , https://docs.astral.sh/uv/getting-started/installation/ and https://dotnet.microsoft.com/download/dotnet/10.0 .
 
-## 5. Run the blink probe (90 s, then the camera AI is switched off to cool down)
-```bash
-cd "/Users/imasha/Documents/Hackathon 2026/brain" && uv run python src/brain/probes/blink_probe.py
+### A3. Get the project
+```powershell
+cd $HOME\Documents
+git clone https://github.com/MariiaSierikova/hackathon-2026.git
+cd hackathon-2026\brain
 ```
-Blink normally. Each `BLINK #n` line should come with a soft tap on the mouse.
-The 5-second status lines show how many distinct AI results per second we really get (Logitech says ~27).
+(No Git? On the GitHub page of the project click **Code -> Download ZIP**, unzip it, and open PowerShell in the `brain` folder.)
 
-If the wrong camera opens (e.g. the Mac's own), add `--device 1` (try 0, 1, 2).
+### A4. Install our Python libraries (one time, a few minutes)
+```powershell
+uv sync
+```
+It downloads Python 3.12 and the libraries. Wait until it finishes without a red error.
 
+### A5. Plug in the camera and wait one minute
+Connect the camera with the USB 3 cable and wait about 60 seconds (it boots).
+Check: press `Win + R`, type `devmgmt.msc`, Enter. Under **Cameras** you should see `LVNext Camera` (colour) and `LVNext CPD Camera` (infrared).
+Allow apps to use the camera: **Settings -> Privacy & security -> Camera -> Let desktop apps access your camera: On**.
+
+### A6. Give the camera's network adapter a fixed address
+The camera sends its AI results over a small virtual network cable inside the USB cable. Windows needs to know your address on it.
+1. Press `Win + R`, type `ncpa.cpl`, Enter. A **new Ethernet adapter** appeared when you plugged in the camera (its name may contain *LVNext*, *USB*, *NCM*, or it just says *Unidentified network*).
+   - **No new adapter?** Open `devmgmt.msc`. If you see `CDC NCM` under *Other devices*: right-click -> *Update driver* -> *Browse my computer* -> *Let me pick from a list* -> *Network adapters* -> *Microsoft* -> **UsbNcm Host Device**. Also try another USB 3 port or cable.
+2. Right-click that adapter -> **Properties** -> double-click **Internet Protocol Version 4 (TCP/IPv4)** -> **Use the following IP address**:
+   - IP address: `192.168.1.20`
+   - Subnet mask: `255.255.255.0`
+   - Default gateway and DNS: **leave empty** -> OK -> OK
+3. **Turn Wi-Fi off if it also uses `192.168.1.x`.** Check with:
+```powershell
+ipconfig | findstr "192.168.1"
+```
+   You should see only the camera adapter (`192.168.1.20`). If your Wi-Fi shows `192.168.1.something` too, switch Wi-Fi off during the test (or use a phone hotspot).
+4. Test the link (the first ping may time out, the others must answer):
+```powershell
+ping 192.168.1.10
+```
+   If Windows asks whether to allow Python on the network later, choose **Private networks -> Allow**.
+
+### A7. Type the camera login into this window
+Use the user name and password printed on the card in your kit. Type them only here, never in chat, a file or a message:
+```powershell
+$env:LOGIWEBCAM_USER = "type-the-user-from-the-card"
+$env:LOGIWEBCAM_PASSWORD = "type-the-password-from-the-card"
+```
+They live only in this PowerShell window. If you close it, repeat this step.
+
+### A8. Check the whole link
+```powershell
+uv run python ..\scripts\check_camera.py
+```
+Every line should say `[PASS]`. One `[WARN]` about "AI results not updating" is normal here. If a line says `[FAIL]` it prints the fix; do that and run it again.
+
+### A9. See yourself with the camera's face mesh (find the right camera)
+```powershell
+uv run python vendor\logiinsight\rgb_ai_live.py --face-mesh
+```
+- It lists the cameras it found with numbers. Pick the one that shows a **colour** picture. The infrared one is grey and tall; your laptop's own webcam has no mesh.
+- A window opens with a **green dot mesh on your face**. Move around a little, then press `q` to quit.
+- Write down the camera number you picked (call it `N`).
+- If the mesh never appears: check A5-A8 again (the AI only runs while the colour camera is open).
+
+### A10. Run the blink test (60 seconds)
+Sit in front of the camera, face the screen, blink normally. Replace `N` with your camera number:
+```powershell
+uv run python src\brain\probes\blink_probe.py --device N --seconds 60
+```
+Expected: a line for each blink, for example `BLINK #3  closed  120 ms   EAR=0.21`, then every 5 seconds a status line, and at the end a summary like
+`Summary: 14 blinks in 60s = 14.0/min | AI results 1500 (25.0/s) | mesh missing in 40 results`.
+- Normal is about 15-20 blinks a minute. Count your real blinks for 20 seconds and compare.
+- If it prints `(trigger not delivered ...)` after each blink, that is fine for Part A (the plugin is not installed yet).
+- At the end the camera AI is switched off on purpose, so the camera can cool down.
+
+**Part A is done.** Send back the whole text from the A10 run (copy it from the window), and tell us how many blinks you counted yourself.
+Don't run the camera AI for more than about 10 minutes in a row (it can overheat and freeze; unplug it to cool down).
+
+## Part B - a blink makes the mouse tap (needs the MX Master 4)
+
+### B1. Make sure the plugin folder exists and build the plugin
+```powershell
+cd $HOME\Documents\hackathon-2026\plugin\WorkHealthCoachPlugin\src
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\Logi\LogiPluginService\Plugins" | Out-Null
+dotnet build -c Debug
+```
+The last line should say `Build succeeded`. (It also creates a link so Logi Options+ loads the plugin from our folder.)
+
+### B2. Restart the Logi plugin service
+Open **Logi Options+** -> **Settings** (or the gear/your profile) -> **Restart Logi Plugin Service**. Wait 10 seconds.
+
+### B3. Test the plugin without the camera
+Go back to the `brain` folder and send a test trigger:
+```powershell
+cd $HOME\Documents\hackathon-2026\brain
+uv run python ..\scripts\trigger.py --list
+uv run python ..\scripts\trigger.py pace_too_fast --force
+```
+`--list` prints the trigger names; the second command should make the MX Master 4 give a long calm vibration.
+No answer ("Cannot reach the plugin")? Repeat B2, and check that the MX Master 4 is connected in Options+.
+
+### B4. Blink -> tap
+(Do A7 again if you opened a new PowerShell window.)
+```powershell
+uv run python src\brain\probes\blink_probe.py --device N --seconds 60
+```
+Each detected blink should now give **one soft tap** on the mouse. Tell us whether taps and blinks match, and roughly how late the tap feels.
+
+## If something goes wrong
+| Problem | What to do |
+|---|---|
+| `winget` not found | Install "App Installer" in the Microsoft Store, or use the download links in A2 |
+| `uv`/`git`/`dotnet` not found | Close PowerShell, open a new one |
+| No new adapter in `ncpa.cpl` | `devmgmt.msc` -> CDC NCM -> driver *UsbNcm Host Device* (A6); another USB 3 port/cable |
+| `ping 192.168.1.10` fails | Re-check IP `192.168.1.20` / mask `255.255.255.0` / empty gateway; turn Wi-Fi off; disconnect any VPN |
+| `Authentication failed` | Re-type the card values in A7 exactly (no extra spaces) |
+| Wrong camera opens / no colour picture | Use the number from A9 with `--device N`; try 0, 1, 2 |
+| Mesh never shows, `distinct AI results/s: 0.0` | The colour camera isn't being read: redo A5, A9; check Windows camera privacy |
+| Video freezes / camera hot | Unplug it, let it cool a few minutes, plug in again; run shorter tests |
+| Python asks for network access | Allow on **Private** networks |
 
 ---
-# Result of the first test on the Mac (2026-11-21)
-- Link works: network adapter, SSH login, firmware check all `PASS` (`scripts/check_camera.py`).
-- **On macOS the camera shows only its infrared stream ("LVNext CPD Camera")**; the colour "LVNext Camera" is not offered by macOS
-  (Logitech: colour does not work on Macs). The camera's built-in face AI runs only on the colour stream, so **no AI results on a Mac**
-  and `blink_probe.py` saw 0 results. Mic ("LVNext Microphone") works on the Mac.
-- **Next: run the same probe on the teammate's Windows laptop** (colour camera + AI available there). Nothing in the plugin depends on the camera.
-
-## Windows steps (teammate laptop)
-1. Install: Logi Options+, .NET 10 SDK, `uv` (https://docs.astral.sh/uv/), Git. `git clone https://github.com/MariiaSierikova/hackathon-2026`.
-2. Build the plugin: `cd plugin\WorkHealthCoachPlugin\src` then `dotnet build -c Debug` (creates the plugin link; restart Logi Plugin Service in Options+ if needed).
-3. Camera network: `Win+R` -> `ncpa.cpl` -> the new LVNext/NCM adapter -> IPv4 properties -> IP `192.168.1.20`, mask `255.255.255.0`, gateway/DNS empty. Turn Wi-Fi off if it uses 192.168.1.x.
-4. Credentials (cmd, this window only; never commit): `set LOGIWEBCAM_USER=...` and `set LOGIWEBCAM_PASSWORD=...` (values on the kit card).
-5. `cd brain` then `uv run python ../scripts/check_camera.py`, then `uv run python src/brain/probes/blink_probe.py --seconds 60`
-   (add `--device 0/1/2` if the wrong camera opens; use `--format NV12` only if you also need IR).
+## Notes from the first test on the Mac (2026-11-21)
+- Network adapter, SSH login and firmware checks all passed on the Mac (`scripts/check_camera.py`).
+- macOS lists only the infrared camera ("LVNext CPD Camera"); the colour "LVNext Camera" is not offered, so the face AI gave 0 results and no blinks.
+  The microphone ("LVNext Microphone") works on the Mac. Hence this Windows test.
