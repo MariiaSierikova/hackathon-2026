@@ -133,6 +133,12 @@ namespace Loupedeck.WorkHealthCoachPlugin
             }
         }
 
+        public static void DismissAlert()
+        {
+            LastTrigger = null;
+            Raise();
+        }
+
         public static void SetMetrics(Double? wpm)
         {
             Wpm = wpm;

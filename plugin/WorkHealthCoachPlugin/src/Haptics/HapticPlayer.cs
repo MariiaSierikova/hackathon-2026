@@ -2,6 +2,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -48,11 +49,28 @@ namespace Loupedeck.WorkHealthCoachPlugin
             plugin.PluginEvents.AddEvent(Done, "Done pulse", "Task completed");
         }
 
-        public static void Play(String patternName)
+        // light = just the first tap; normal = the pattern; strong = the pattern twice.
+        private static Step[] Scale(Step[] steps, String strength) => strength switch
+        {
+            "off" => Array.Empty<Step>(),
+            "light" => new[] { new Step(steps[0].Pulse == Calm ? Calm : Soft, 0) },
+            "strong" => steps.Take(steps.Length - 1)
+                .Concat(new[] { new Step(steps[^1].Pulse, 450) })
+                .Concat(steps).ToArray(),
+            _ => steps,
+        };
+
+        public static void Play(String patternName, String strength = "normal")
         {
             if (_plugin == null || !Patterns.TryGetValue(patternName, out var steps))
             {
                 PluginLog.Warning($"HapticPlayer: unknown pattern '{patternName}' or not initialised");
+                return;
+            }
+
+            steps = Scale(steps, strength);
+            if (steps.Length == 0)
+            {
                 return;
             }
 

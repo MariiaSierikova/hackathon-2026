@@ -27,6 +27,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 this._cts = new CancellationTokenSource();
                 this._listener = new HttpListener();
                 this._listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+                this._listener.Prefixes.Add($"http://localhost:{Port}/");
                 this._listener.Start();
                 _ = Task.Run(() => this.LoopAsync(this._cts.Token));
                 PluginLog.Info($"LocalServer listening on http://127.0.0.1:{Port}/");
@@ -84,6 +85,35 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 {
                     var names = String.Join(",", HapticPlayer.PatternNames.Select(n => $"\"{n}\""));
                     await Reply(ctx, 200, $"{{\"triggers\":[{names}]}}");
+                }
+                else if (method == "GET" && path == "/settings")
+                {
+                    await Reply(ctx, 200, NotificationPolicy.Settings.ToJson());
+                }
+                else if (method == "POST" && path == "/settings")
+                {
+                    String body;
+                    using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8))
+                    {
+                        body = await reader.ReadToEndAsync();
+                    }
+
+                    var s = PolicySettings.FromJson(body);
+                    s.Preset = "custom";
+                    NotificationPolicy.SetSettings(s);
+                    await Reply(ctx, 200, "{\"ok\":true}");
+                }
+                else if (method == "POST" && path == "/preset")
+                {
+                    using var doc = JsonDocument.Parse(await new StreamReader(ctx.Request.InputStream, Encoding.UTF8).ReadToEndAsync());
+                    NotificationPolicy.SetPreset(doc.RootElement.GetProperty("name").GetString());
+                    await Reply(ctx, 200, "{\"ok\":true}");
+                }
+                else if (method == "POST" && path == "/snooze")
+                {
+                    using var doc = JsonDocument.Parse(await new StreamReader(ctx.Request.InputStream, Encoding.UTF8).ReadToEndAsync());
+                    NotificationPolicy.Snooze(doc.RootElement.TryGetProperty("minutes", out var mm) && mm.TryGetInt32(out var mv) ? mv : 15);
+                    await Reply(ctx, 200, "{\"ok\":true}");
                 }
                 else if (method == "POST" && path == "/metrics")
                 {
