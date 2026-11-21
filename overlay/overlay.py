@@ -167,13 +167,18 @@ class Overlay(QtWidgets.QWidget):
         p.drawText(rect, QtCore.Qt.AlignCenter, text)
 
 
+def start(demo=None):
+    """Create the Qt app and the overlay window (also used by brain/src/brain/app.py, the single launcher)."""
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+    return app, Overlay(demo=demo)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--demo", choices=["owl", "snail"], help="loop an animal without the plugin")
     a = ap.parse_args()
-    app = QtWidgets.QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
-    ov = Overlay(demo=a.demo)  # noqa: F841
+    app, ov = start(a.demo)  # noqa: F841
     print("Overlay running. Ctrl+C to quit." + (f" (demo: {a.demo})" if a.demo else " Waiting for the plugin."))
     import signal
     signal.signal(signal.SIGINT, lambda *_: app.quit())

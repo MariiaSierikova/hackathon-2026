@@ -63,8 +63,7 @@ class FakeCam:
         return {"timestamp_ms": n * 37, "faces": [{"bbox": [0, 0, 1, 1], "landmarks": self._landmarks(closed)}]}
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+def add_args(ap):
     ap.add_argument("--device", default=None, help="camera number of the colour 'LVNext Camera' (see CAMERA_TEST.md A9)")
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720)
@@ -76,39 +75,41 @@ def main():
     ap.add_argument("--ratio", type=float, default=0.72, help="eye counts as closed below ratio * open level (higher = more sensitive)")
     ap.add_argument("--min-samples", type=int, default=2, help="results the eye must stay closed to count as a blink")
     ap.add_argument("--log", default=None, help="write every result (time, EAR, baseline, blink) to this CSV file, for tuning")
-    ap.add_argument("--simulate", action="store_true", help="NO camera: fake face that blinks, then stares, then blinks again (30 s)")
-    a = ap.parse_args()
+    ap.add_argument("--simulate", action="store_true", help="NO hardware: fake face that blinks then stares (and, in app.py, a fake talker too)")
 
+
+def run(a, stop, say=print):
+    """Blink monitor loop. Runs until `stop` is set, the time is up, or (simulation) the fake timeline ends."""
     coach = CoachClient(min_repeat_s=2.0)
-    plugin_ok = coach.health()
-    if plugin_ok:
-        print(f"Plugin answers (build {getattr(coach, 'build', '?')}).")
+    if coach.health():
+        say(f"Plugin answers (build {getattr(coach, 'build', '?')}).")
     else:
-        print("WARNING: the Logi plugin does NOT answer on 127.0.0.1:8787, blinks will only be printed. "
-              "Is Logi Options+ running with the WorkHealthCoach plugin? (uv run python ..\\scripts\\trigger.py --list)")
+        say("WARNING: the Logi plugin does NOT answer on 127.0.0.1:8787, blinks will only be printed. "
+            "Is Logi Options+ running with the WorkHealthCoach plugin?")
 
     cap = None
-    stop = threading.Event()
+    reader_stop = threading.Event()
     if a.simulate:
-        cam = FakeCam(blink_times=[3, 6, 20, 23, 26], duration=30)
-        print("SIMULATION: fake face, blinks at 3 s and 6 s, then STARES until 20 s, then blinks again.\n"
-              f"Expected: the owl appears about {6 + a.no_blink_after:.0f} s in and disappears at 20 s.")
+        cam = FakeCam(blink_times=[3, 6, 20, 23], duration=25)
+        say("SIMULATION: fake face, blinks at 3 s and 6 s, then STARES until 20 s, then blinks again. "
+            f"Expected: the owl appears about {6 + a.no_blink_after:.0f} s in and disappears at 20 s.")
     else:
         if not load_camera_env():
-            sys.exit("Camera credentials not found: set LOGIWEBCAM_USER and LOGIWEBCAM_PASSWORD (docs/CAMERA_TEST.md A7).")
+            say("ERROR: camera credentials not found: set LOGIWEBCAM_USER and LOGIWEBCAM_PASSWORD (docs/CAMERA_TEST.md A7).")
+            return
         from logiwebcam import LogiWebcamClient
         from rgb_ai_capture import open_uvc
 
-        print("Connecting to camera AI ...")
+        say("Connecting to camera AI ...")
         cam = LogiWebcamClient(ip=a.ip)
         cam.connect()
         cam.set_ai_config(enable_face_detection=True, enable_face_mesh=True)
         time.sleep(1.0)
-        print("Opening the colour video (keeps the AI running) ...")
+        say("Opening the colour video (keeps the AI running) ...")
         cap, _, _ = open_uvc(a.width, a.height, a.device, a.format)
 
         def reader():                       # the camera AI only runs while someone reads the video
-            while not stop.is_set():
+            while not reader_stop.is_set():
                 cap.read()
 
         threading.Thread(target=reader, daemon=True).start()
@@ -122,13 +123,13 @@ def main():
     t0 = time.time()
     t_status = t0
     if not a.simulate:
-        print(f"\nWatching for {a.minutes:.0f} min. Blink normally; stare at the screen for ~{a.no_blink_after:.0f}s to see the owl. "
-              "Ctrl+C to stop.\n")
+        say(f"Watching for {a.minutes:.0f} min. Blink normally; stare at the screen for ~{a.no_blink_after:.0f}s to see the owl.")
     try:
-        while True:
+        while not stop.is_set():
             if a.simulate and cam.finished:
                 break
             if not a.simulate and time.time() - t0 >= a.minutes * 60:
+                say(f"{a.minutes:.0f} minutes are up: camera AI switched off so the camera can cool down.")
                 break
             data = cam.get_latest_ai_data()
             now = time.time()
@@ -147,7 +148,7 @@ def main():
                             blinks += 1
                             watcher.blink(now)
                             coach.blink_detected()
-                            print(f"  [{now - t0:5.1f}s] blink #{blinks} ({dur:.0f} ms)")
+                            say(f"[{now - t0:5.1f}s] blink #{blinks} ({dur:.0f} ms)")
                         if log:
                             base = det.baseline()
                             log.write(f"{now - t0:.3f},{e:.4f},{base if base else ''},{int(det.closed)},{int(dur is not None)},"
@@ -155,19 +156,17 @@ def main():
             sev = watcher.severity(now)
             if sev is not None and coach.trigger(BLINK_LOW, sev, force=a.force):
                 alerts += 1
-                print(f"  [{now - t0:5.1f}s] >> no blink for {now - watcher.last_blink:.0f}s: blink_low severity {sev:.2f} sent")
+                say(f"[{now - t0:5.1f}s] >> no blink for {now - watcher.last_blink:.0f}s: blink_low severity {sev:.2f} sent")
             if now - t_status >= 5:
                 t_status = now
                 base = det.baseline()
                 gap = (now - watcher.last_blink) if watcher.last_blink else 0
-                print(f"[{int(now - t0):3d}s] face: {'yes' if faces else 'NO '} | since last blink: {gap:4.1f}s | blinks: {blinks} | "
-                      f"open-eye EAR: {f'{base:.2f}' if base else 'learning'} | no-mesh results: {no_mesh} | "
-                      f"plugin: {coach.sent} ok / {coach.failed} failed")
+                say(f"[{int(now - t0):3d}s] face: {'yes' if faces else 'NO '} | since last blink: {gap:4.1f}s | blinks: {blinks} | "
+                    f"open-eye EAR: {f'{base:.2f}' if base else 'learning'} | no-mesh results: {no_mesh} | "
+                    f"plugin: {coach.sent} ok / {coach.failed} failed")
             time.sleep(0.02)
-    except KeyboardInterrupt:
-        pass
     finally:
-        stop.set()
+        reader_stop.set()
         time.sleep(0.2)
         if cap is not None:
             cap.release()
@@ -180,9 +179,20 @@ def main():
         time.sleep(0.3)
         if log:
             log.close()
-    dt = time.time() - t0
-    print(f"\nDone: {blinks} blinks in {dt:.0f}s ({blinks / dt * 60:.1f}/min), {alerts} blink_low reminders sent, "
-          f"plugin accepted {coach.sent}, failed {coach.failed}" + (f" (last error: {coach.last_error})" if coach.failed else "") + ".")
+    dt = max(1.0, time.time() - t0)
+    say(f"Done: {blinks} blinks in {dt:.0f}s ({blinks / dt * 60:.1f}/min), {alerts} blink_low reminders sent, "
+        f"plugin accepted {coach.sent}, failed {coach.failed}" + (f" (last error: {coach.last_error})" if coach.failed else "") + ".")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    add_args(ap)
+    a = ap.parse_args()
+    stop = threading.Event()
+    try:
+        run(a, stop, say=lambda m: print(m, flush=True))
+    except KeyboardInterrupt:
+        stop.set()
 
 
 if __name__ == "__main__":

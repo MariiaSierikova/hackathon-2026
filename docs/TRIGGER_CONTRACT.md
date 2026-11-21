@@ -101,6 +101,11 @@ Every decision is logged, so you can see why something did or did not show:
 Typical lines: `Policy: pace_too_fast dropped: severity 0.3 < 0.5`, `... dropped: cooldown (90s)`, `... -> visual only (mouse after 5s if it persists)`, `... -> haptic visual overlay`.
 **If your trigger "does nothing", read this log first**: most often severity was too low or the cooldown had not passed (use `--force` to test the drawing itself).
 
-## 5. Questions for the team
+## 5. What already sends triggers
+- `brain/src/brain/monitors/blink_monitor.py`: camera -> `blink_low` / `blink_detected`.
+- `brain/src/brain/monitors/pace_monitor.py`: microphone -> `pace_too_fast` / `pace_ok` (detection = `logiinsight_api/speech_flagger.py`, copied unchanged into `brain/src/brain/audio/pace.py`).
+- `brain/src/brain/app.py`: runs both plus the owl/snail window in ONE command (see `docs/WINDOWS_DEMO.md`).
+
+## 6. Questions for the team
 - Who owns the 20-20-20 **20-minute timer** that starts a break? (Today there is only `lookaway_done`, the verification.) Proposal: a trigger `break_due` sent by whoever has the timer; we will add the Keypad/mouse reaction.
 - Camera AI limits to design around: one face max, ~10 min continuous AI before it overheats (duty-cycle it), mesh missing in some frames. See `docs/RESOURCES.md`.

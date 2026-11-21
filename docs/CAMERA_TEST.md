@@ -144,6 +144,8 @@ Each detected blink should now give **one soft tap** on the mouse. Tell us wheth
 
 ## Part C - the owl appears when you don't blink (full demo on Windows)
 
+> **Newer and simpler: use [WINDOWS_DEMO.md](WINDOWS_DEMO.md)** - one window, one command, owl AND snail. Part C below still works but needs two windows.
+
 Three programs run at the same time, each in its own PowerShell window. Replace `N` with your camera number from step A9.
 Do `git pull` first, then `uv sync` in the `brain` folder (a new library for the owl window gets installed).
 
