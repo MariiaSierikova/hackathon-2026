@@ -37,6 +37,7 @@ class GazeFeed:
     def __init__(self, url="ws://127.0.0.1:8964", interval_ms=200):
         self.url, self.interval_ms = url, interval_ms
         self.latest, self.latest_at, self.connected, self.error = None, 0.0, False, None
+        self.last_ts = None
         self._stop = threading.Event()
         threading.Thread(target=self._run, daemon=True).start()
 
@@ -56,7 +57,10 @@ class GazeFeed:
                         except TimeoutError:
                             continue
                         if msg.get("type") == "snapshot":
-                            self.latest, self.latest_at = msg, time.monotonic()
+                            # the server re-sends the newest snapshot every interval: only a NEW timestamp_ms is a new camera frame
+                            if msg.get("timestamp_ms") != self.last_ts:
+                                self.last_ts = msg.get("timestamp_ms")
+                                self.latest, self.latest_at = msg, time.monotonic()
             except Exception as e:                 # app not started yet / closed: retry
                 self.error = e
             self.connected = False
