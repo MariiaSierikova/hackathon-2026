@@ -29,10 +29,11 @@ class BlinkDetector:
 
     A blink only counts when the eye stayed closed for at least `min_samples` consecutive results and the dip was
     deep (below depth_ratio * open level). That filters single noisy frames, which would otherwise count as blinks
-    and keep resetting the "no blink for N seconds" timer.
+    and keep resetting the "no blink for N seconds" timer. Closures up to max_ms (2.5 s) count: a slow blink or a
+    moment with the eyes shut rests the eyes just as well (checked on a real Windows log, 2026-11-21).
     """
 
-    def __init__(self, ratio=0.72, min_ms=40, max_ms=600, refractory_ms=180, min_samples=2, depth_ratio=0.62):
+    def __init__(self, ratio=0.72, min_ms=40, max_ms=2500, refractory_ms=180, min_samples=2, depth_ratio=0.62):
         self.ratio, self.min_ms, self.max_ms, self.refractory_ms = ratio, min_ms, max_ms, refractory_ms
         self.min_samples, self.depth_ratio = min_samples, depth_ratio
         self.history = collections.deque(maxlen=150)   # ~5 s of samples
