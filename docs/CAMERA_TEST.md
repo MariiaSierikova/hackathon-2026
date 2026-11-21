@@ -142,6 +142,48 @@ uv run python src\brain\probes\blink_probe.py --device N --seconds 60
 ```
 Each detected blink should now give **one soft tap** on the mouse. Tell us whether taps and blinks match, and roughly how late the tap feels.
 
+## Part C - the owl appears when you don't blink (full demo on Windows)
+
+Three programs run at the same time, each in its own PowerShell window. Replace `N` with your camera number from step A9.
+Do `git pull` first, then `uv sync` in the `brain` folder (a new library for the owl window gets installed).
+
+**What you need running**
+1. **Logi Options+ with our plugin** (Part B). Nothing to type: it runs in the background.
+2. **The owl window** (window 1):
+```powershell
+cd C:\LauzHack\hackathon-2026\brain
+uv run python ..\overlay\overlay.py
+```
+   It prints `Overlay running` and stays invisible until needed. (To try it alone first: `uv run python ..\overlay\overlay.py --demo owl` shows the owl for 14 s, then Ctrl+C.)
+3. **The blink monitor** (window 2). Type the camera login first (step A7), then:
+```powershell
+cd C:\LauzHack\hackathon-2026\brain
+uv run python src\brain\monitors\blink_monitor.py --device N --no-blink-after 6 --force
+```
+   - `--no-blink-after 6` = the reminder comes after 6 s without a blink (the real default is 8 s). Normal people blink every 3-5 s.
+   - `--force` = demo mode: skips the "don't nag more than every 5 minutes" rule so you can repeat the test. Remove it for the real behaviour.
+   - It stops by itself after 8 minutes (`--minutes`) so the camera does not overheat.
+
+**What you should see**
+- Window 2 prints `blink #1 (120 ms)`, ... for every blink, and `[5s] face: yes | since last blink: 2.1s | blinks: 3 ...` every 5 seconds.
+- **Stare at the screen without blinking for ~6 seconds:** window 2 prints `>> no blink ... blink_low severity 0.50 sent`, a **cute owl appears bottom-right on your screen** ("blink!"), the mouse gives two soft taps, and (with the Keypad) the big blinking eye fills the Keypad (open the "Coach screen" key first).
+- **Blink:** the owl and the eye disappear right away.
+- Step away from the camera (no face): nothing is sent and the timer restarts.
+
+**The owl must be hidden from screen sharing.** On Windows 10 (2004+) and 11 it is excluded from capture. Check it: start a Teams/Zoom/Meet screen share (or Win+Shift+S / the Xbox Game Bar recorder `Win+Alt+R`) while the owl is showing, and see whether it appears for the others. Tell us the result.
+
+**Send back:** the text from window 2 (the blink lines and the final `Done: ... blinks in ...` line), how many blinks you counted yourself in the same time, whether the owl came on time, and whether it disappeared when you blinked.
+
+If it does not work:
+| Problem | What to do |
+|---|---|
+| Window 2: `Camera credentials not found` | Do step A7 in this same window |
+| Window 2: `WARNING: the Logi plugin does not answer` | Part B: restart the Logi Plugin Service; `uv run python ..\scripts\trigger.py --list` must answer |
+| Owl never appears, window 2 says `blink_low ... sent` | Is window 1 running? Check the plugin answers `Invoke-RestMethod http://127.0.0.1:8787/overlay` (should show `animal : owl` while it is due) |
+| Owl appears at once / many false alerts | Blink detection thinks you never blink: send us the status lines; try `--ratio 0.8` |
+| It says you blink but you did not | Same: send the lines; `--ratio 0.65` makes it stricter |
+| `face: NO` all the time | Wrong camera number (use the colour one from A9), or you are out of frame |
+
 ## "Cannot reach the plugin on 127.0.0.1:8787" (Part B, step B3)
 This means the plugin is not running or not loaded. Check in this order (PowerShell):
 

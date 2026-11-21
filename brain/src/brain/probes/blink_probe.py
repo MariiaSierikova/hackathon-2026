@@ -23,19 +23,7 @@ sys.path.insert(0, str(HERE.parents[3] / "vendor" / "logiinsight"))
 
 from brain.camconfig import load_camera_env  # noqa: E402
 
-# MediaPipe 468-point face mesh indices: [outer corner, upper1, upper2, inner corner, lower2, lower1]
-EYES = {
-    "right": (33, 160, 158, 133, 153, 144),
-    "left": (362, 385, 387, 263, 373, 380),
-}
-
-
-def ear(lm, idx):
-    """Eye aspect ratio from 6 landmarks (x, y in stream pixels)."""
-    p = [lm[i] for i in idx]
-    d = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5  # noqa: E731
-    horiz = d(p[0], p[3])
-    return (d(p[1], p[5]) + d(p[2], p[4])) / (2.0 * horiz) if horiz > 1e-6 else None
+from brain.vision.blink import EYES, BlinkDetector, ear  # noqa: E402
 
 
 def post_trigger(trigger, severity=1.0):
@@ -49,38 +37,6 @@ def post_trigger(trigger, severity=1.0):
     except Exception as e:  # plugin not running etc.
         print(f"  (trigger not delivered: {e})")
         return False
-
-
-class BlinkDetector:
-    """Adaptive threshold: eye is 'closed' when EAR < ratio * recent open level."""
-
-    def __init__(self, ratio=0.72, min_ms=40, max_ms=600, refractory_ms=180):
-        self.ratio, self.min_ms, self.max_ms, self.refractory_ms = ratio, min_ms, max_ms, refractory_ms
-        self.history = collections.deque(maxlen=150)   # ~5 s of samples
-        self.closed_since = None
-        self.last_blink = 0.0
-
-    def baseline(self):
-        if len(self.history) < 20:
-            return None
-        s = sorted(self.history)
-        return s[int(len(s) * 0.85)]                   # high percentile = eyes open level
-
-    def update(self, e, now):
-        """Returns blink duration in ms when a blink just finished, else None."""
-        base = self.baseline()
-        closed = base is not None and e < base * self.ratio
-        if not closed:
-            self.history.append(e)                      # learn only from open-eye samples
-        if closed and self.closed_since is None:
-            self.closed_since = now
-        elif not closed and self.closed_since is not None:
-            dur = (now - self.closed_since) * 1000
-            self.closed_since = None
-            if self.min_ms <= dur <= self.max_ms and (now - self.last_blink) * 1000 >= self.refractory_ms:
-                self.last_blink = now
-                return dur
-        return None
 
 
 def main():
