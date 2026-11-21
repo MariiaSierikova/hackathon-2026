@@ -23,14 +23,24 @@ namespace Loupedeck.WorkHealthCoachPlugin
         }
 
         // This method is called when the plugin is loaded.
+        private readonly LocalServer _server = new();
+
         public override void Load()
         {
             HapticPlayer.Init(this);
+
+            // Haptics subscribe to triggers. Keypad widgets and the notification policy plug in here later.
+            TriggerBus.Received += OnTrigger;
+            this._server.Start();
         }
+
+        private static void OnTrigger(TriggerMessage message) => HapticPlayer.Play(message.Trigger);
 
         // This method is called when the plugin is unloaded.
         public override void Unload()
         {
+            TriggerBus.Received -= OnTrigger;
+            this._server.Stop();
         }
     }
 }
