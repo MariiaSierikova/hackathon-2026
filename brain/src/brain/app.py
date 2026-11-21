@@ -21,7 +21,7 @@ sys.path.insert(0, str(HERE.parents[1]))                       # brain/src
 sys.path.insert(0, str(ROOT / "brain" / "vendor" / "logiinsight"))
 sys.path.insert(0, str(ROOT / "overlay"))
 
-from brain.monitors import blink_monitor, pace_monitor  # noqa: E402
+from brain.monitors import blink_monitor, pace_monitor, pomodoro_monitor  # noqa: E402
 
 
 def list_devices():
@@ -49,6 +49,8 @@ def main():
     ap.add_argument("--no-pace", action="store_true", help="do not watch speech pace (no microphone)")
     ap.add_argument("--no-overlay", action="store_true", help="do not show the on-screen owl/snail")
     blink_monitor.add_args(ap)
+    ap.add_argument("--pomodoro", action="store_true", help="run the Pomodoro timer (needs the Gaze Tracker app) and show its status chip")
+    pomodoro_monitor.add_args(ap)
     # pace-only options (the shared ones --force/--simulate are already defined by blink_monitor.add_args)
     ap.add_argument("--mic", default=None, help="microphone number (see --list). Default: the camera microphone, else the default one")
     ap.add_argument("--fast-rate", type=float, default=pace_monitor.RATE_THRESHOLD, help="syllables/s that count as too fast")
@@ -79,6 +81,8 @@ def main():
         threads.append(threading.Thread(target=blink_monitor.run, args=(a, stop, say_for("blink")), name="blink", daemon=True))
     if not a.no_pace:
         threads.append(threading.Thread(target=pace_monitor.run, args=(a, stop, say_for("pace")), name="pace", daemon=True))
+    if a.pomodoro:
+        threads.append(threading.Thread(target=pomodoro_monitor.run, args=(a, stop, say_for("pomo")), name="pomo", daemon=True))
     if not threads:
         sys.exit("Nothing to run: you disabled both blink and pace.")
 
@@ -101,6 +105,9 @@ def main():
     from PySide6 import QtCore
 
     app, _ov = overlay_module.start()
+    if a.pomodoro:
+        import pomodoro_chip
+        chip = pomodoro_chip.Chip(pomodoro_monitor.get_status)   # keep the reference, or Qt deletes it  # noqa: F841
     say_for("app")("Overlay window ready (invisible until the owl or the snail is needed). Ctrl+C stops everything.")
     for t in threads:
         t.start()

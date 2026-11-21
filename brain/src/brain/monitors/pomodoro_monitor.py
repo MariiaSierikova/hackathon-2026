@@ -24,6 +24,13 @@ from brain.bridge.client import BREAK_DUE, LOOKAWAY_DONE, CoachClient  # noqa: E
 from brain.vision.pomodoro import DUE, PAUSED, PomodoroConfig, PomodoroTracker  # noqa: E402
 
 
+STATUS = {"state": None, "remaining": 0.0}      # read by the on-screen chip (overlay/pomodoro_chip.py)
+
+
+def get_status():
+    return STATUS["state"], STATUS["remaining"]
+
+
 class GazeFeed:
     """Background thread: keeps the newest Gaze Tracker snapshot. `connected` is False while the app is not reachable."""
 
@@ -128,12 +135,14 @@ def run(a, stop, say=print):
                     say("Gaze Tracker not reachable yet (start the app, tray icon). The clock does not run until it is.")
                     warned = True
                 tracker._last = None                 # a gap in data must not count as time
+                STATUS["state"] = None               # chip hides: no data, no clock
                 time.sleep(0.2)
                 continue
             warned = False
             snap = feed.latest if now - feed.latest_at < 3.0 else None      # stale data = nobody seen
             present, focused = observe(snap)
             state = tracker.update(now, present, focused)
+            STATUS["state"], STATUS["remaining"] = state, tracker.remaining_s()
             if state != last_state:
                 say(f"[{now - t0:5.0f}s] {state.upper()}  (worked {tracker.worked:.0f}s, "
                     f"{'face' if present else 'no face'}, {'on screen' if focused else 'off screen'})")
@@ -150,6 +159,7 @@ def run(a, stop, say=print):
                     + (" (paused: not looking / not here)" if state == PAUSED else ""))
             time.sleep(0.2)
     finally:
+        STATUS["state"] = None
         feed.stop()
         say("Pomodoro monitor stopped.")
 
