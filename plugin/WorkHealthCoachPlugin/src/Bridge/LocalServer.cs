@@ -85,6 +85,19 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     var names = String.Join(",", HapticPlayer.PatternNames.Select(n => $"\"{n}\""));
                     await Reply(ctx, 200, $"{{\"triggers\":[{names}]}}");
                 }
+                else if (method == "POST" && path == "/metrics")
+                {
+                    String body;
+                    using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8))
+                    {
+                        body = await reader.ReadToEndAsync();
+                    }
+
+                    using var doc = JsonDocument.Parse(body);
+                    Double? wpm = doc.RootElement.TryGetProperty("wpm", out var w) && w.TryGetDouble(out var wv) ? wv : null;
+                    SessionState.SetMetrics(wpm);
+                    await Reply(ctx, 200, "{\"ok\":true}");
+                }
                 else if (method == "POST" && path == "/trigger")
                 {
                     String body;
