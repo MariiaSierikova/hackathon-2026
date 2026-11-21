@@ -43,6 +43,25 @@ curl -X POST http://127.0.0.1:8787/trigger -H "Content-Type: application/json" -
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/trigger -ContentType "application/json" -Body '{"trigger":"pace_too_fast","severity":0.8}'
 ```
 
+### The simplest way: a plain True / False
+If your code only knows "problem yes/no", send exactly that. No JSON needed:
+```python
+import urllib.request
+
+def pace_too_fast(flag: bool):                    # flag = True / False from your pace analysis
+    urllib.request.urlopen(f"http://127.0.0.1:8787/pace/{str(flag).lower()}", timeout=1)
+
+pace_too_fast(True)    # speech is too fast  -> snail + calm vibration (through the notification rules)
+pace_too_fast(False)   # pace is fine again  -> ends the snail
+```
+- `GET` (or `POST`) `http://127.0.0.1:8787/pace/true` or `/pace/false` (`True`/`False`, `1`/`0` also work).
+- Any alert works the same way: `/signal/<trigger>/true|false`, for example `/signal/blink_low/true`. `false` ends it
+  (`pace_too_fast` -> `pace_ok`, `blink_low` -> `blink_detected`; other alerts have nothing to end).
+- Optional: `?severity=0.8` (default 1.0), `?force=1` (demo: skip the notification rules).
+- Python client: `coach.signal("pace_too_fast", True)`. Send it again every 1-2 s while it stays True (repeats are throttled for you).
+- Answers: `{"ok":true}`, or `400 {"error":...}` for a bad value or unknown trigger.
+- Note: the mouse buzz for pace waits ~5 s after the first `True` (the Keypad/animal show first). If it stays `True`, the mouse buzzes.
+
 ## 2. How often to send
 - **Keep sending (about every 1-2 s) while the situation lasts, stop when it ends.** The plugin treats repeated triggers as one "episode"
   (it ends after 30 s of silence). Some alerts escalate on persistence: e.g. a pace problem shows on the Keypad first and the mouse only

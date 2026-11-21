@@ -20,6 +20,10 @@
     <OutputPath>$(BaseOutputPath)$(Configuration)\bin\</OutputPath>
 
     <PluginShortName>WorkHealthCoach</PluginShortName>
+
+    <!-- Stamped into the DLL at every build; shown by GET /health and in the log (spots a stale build) -->
+    <InformationalVersion>$([System.DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))Z</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

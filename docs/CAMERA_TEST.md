@@ -147,6 +147,18 @@ Each detected blink should now give **one soft tap** on the mouse. Tell us wheth
 Three programs run at the same time, each in its own PowerShell window. Replace `N` with your camera number from step A9.
 Do `git pull` first, then `uv sync` in the `brain` folder (a new library for the owl window gets installed).
 
+**Step C0 - test the whole chain WITHOUT the camera first (1 minute).** This shows whether plugin + owl window work on this laptop,
+using a fake face that blinks twice, then stares, then blinks again. Start window 1 (the owl, below), then in window 2:
+```powershell
+cd C:\LauzHack\hackathon-2026\brain
+uv run python src\brain\monitors\blink_monitor.py --simulate --no-blink-after 5
+```
+Expected (30 seconds): it prints `Plugin answers (build ...)`, two `blink #...` lines, then about 11 s in `>> no blink for 5s: blink_low severity 0.50 sent`
+and **the owl appears**; at about 20 s a `blink` line appears and **the owl disappears**; it ends with `Done: ... plugin accepted N, failed 0`.
+Window 1 (overlay) prints what it saw: `plugin says animal: None -> owl`, `window shown (owl)`, ..., `window hidden`.
+If the owl does not disappear, send the text of BOTH windows. If `Plugin answers (build ...)` shows a build time older than your last
+`dotnet build`, Windows is still running the old plugin: close Logi Options+ completely (also from the tray), run `dotnet build -c Debug` again, start Options+.
+
 **What you need running**
 1. **Logi Options+ with our plugin** (Part B). Nothing to type: it runs in the background.
 2. **The owl window** (window 1):
@@ -158,10 +170,11 @@ uv run python ..\overlay\overlay.py
 3. **The blink monitor** (window 2). Type the camera login first (step A7), then:
 ```powershell
 cd C:\LauzHack\hackathon-2026\brain
-uv run python src\brain\monitors\blink_monitor.py --device N --no-blink-after 6 --force
+uv run python src\brain\monitors\blink_monitor.py --device N --no-blink-after 6 --force --log ear_log.csv
 ```
    - `--no-blink-after 6` = the reminder comes after 6 s without a blink (the real default is 8 s). Normal people blink every 3-5 s.
    - `--force` = demo mode: skips the "don't nag more than every 5 minutes" rule so you can repeat the test. Remove it for the real behaviour.
+   - `--log ear_log.csv` saves every measurement to a file: **send us that file** (and the window text) so we can tune the blink detection.
    - It stops by itself after 8 minutes (`--minutes`) so the camera does not overheat.
 
 **What you should see**
