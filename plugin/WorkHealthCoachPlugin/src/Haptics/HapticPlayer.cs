@@ -28,6 +28,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
             ["eye_contact_lost"] = new[] { new Step(Soft, 0) },
             ["filler_burst"]     = new[] { new Step(Knock, 0) },
             ["lookaway_done"]    = new[] { new Step(Done, 0) },
+            ["break_due"]        = new[] { new Step(Soft, 300), new Step(Soft, 300), new Step(Soft, 0) },
             ["test_blink"]       = new[] { new Step(Soft, 0) },   // development only: one soft tap per detected blink
             ["person_behind"]    = new[] { new Step(Knock, 350), new Step(Knock, 0) },
         };

@@ -26,6 +26,7 @@ EYE_CONTACT_LOST = "eye_contact_lost"
 BLINK_LOW = "blink_low"
 LOOKAWAY_DONE = "lookaway_done"
 PERSON_BEHIND = "person_behind"
+BREAK_DUE = "break_due"           # Pomodoro: time for a break
 BLINK_DETECTED = "blink_detected"   # control: you blinked -> ends the blink reminder
 PACE_OK = "pace_ok"                 # control: pace is fine again -> ends the pace reminder
 
