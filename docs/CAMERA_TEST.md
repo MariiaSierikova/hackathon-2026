@@ -37,3 +37,20 @@ Blink normally. Each `BLINK #n` line should come with a soft tap on the mouse.
 The 5-second status lines show how many distinct AI results per second we really get (Logitech says ~27).
 
 If the wrong camera opens (e.g. the Mac's own), add `--device 1` (try 0, 1, 2).
+
+
+---
+# Result of the first test on the Mac (2026-11-21)
+- Link works: network adapter, SSH login, firmware check all `PASS` (`scripts/check_camera.py`).
+- **On macOS the camera shows only its infrared stream ("LVNext CPD Camera")**; the colour "LVNext Camera" is not offered by macOS
+  (Logitech: colour does not work on Macs). The camera's built-in face AI runs only on the colour stream, so **no AI results on a Mac**
+  and `blink_probe.py` saw 0 results. Mic ("LVNext Microphone") works on the Mac.
+- **Next: run the same probe on the teammate's Windows laptop** (colour camera + AI available there). Nothing in the plugin depends on the camera.
+
+## Windows steps (teammate laptop)
+1. Install: Logi Options+, .NET 10 SDK, `uv` (https://docs.astral.sh/uv/), Git. `git clone https://github.com/MariiaSierikova/hackathon-2026`.
+2. Build the plugin: `cd plugin\WorkHealthCoachPlugin\src` then `dotnet build -c Debug` (creates the plugin link; restart Logi Plugin Service in Options+ if needed).
+3. Camera network: `Win+R` -> `ncpa.cpl` -> the new LVNext/NCM adapter -> IPv4 properties -> IP `192.168.1.20`, mask `255.255.255.0`, gateway/DNS empty. Turn Wi-Fi off if it uses 192.168.1.x.
+4. Credentials (cmd, this window only; never commit): `set LOGIWEBCAM_USER=...` and `set LOGIWEBCAM_PASSWORD=...` (values on the kit card).
+5. `cd brain` then `uv run python ../scripts/check_camera.py`, then `uv run python src/brain/probes/blink_probe.py --seconds 60`
+   (add `--device 0/1/2` if the wrong camera opens; use `--format NV12` only if you also need IR).
