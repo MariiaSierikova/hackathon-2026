@@ -71,6 +71,15 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     _overlayAnimal = "snail";
                     _overlayUntil = now.AddSeconds(15);
                     break;
+                case "speak_up":
+                    if (_overlayAnimal != "duck" || now >= _overlayUntil)
+                    {
+                        _overlayStart = now;
+                    }
+
+                    _overlayAnimal = "duck";
+                    _overlayUntil = now.AddSeconds(15);
+                    break;
                 case "blink_low":
                     if (_overlayAnimal != "owl" || now >= _overlayUntil)
                     {
@@ -251,6 +260,12 @@ namespace Loupedeck.WorkHealthCoachPlugin
         {
             _eyeAlert = false;
             ClearOverlay("owl");
+            Raise();
+        }
+
+        public static void ClearSpeakAlert()
+        {
+            ClearOverlay("duck");
             Raise();
         }
 

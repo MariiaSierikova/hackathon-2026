@@ -52,6 +52,8 @@ def main():
     # pace-only options (the shared ones --force/--simulate are already defined by blink_monitor.add_args)
     ap.add_argument("--mic", default=None, help="microphone number (see --list). Default: the camera microphone, else the default one")
     ap.add_argument("--fast-rate", type=float, default=pace_monitor.RATE_THRESHOLD, help="syllables/s that count as too fast")
+    ap.add_argument("--quiet-db", type=float, default=-25.0, help="speech level (dBFS) below which you are too quiet -> duck")
+    ap.add_argument("--ok-db", type=float, default=-22.0, help="back above this = loud enough again")
     ap.add_argument("--ok-rate", type=float, default=pace_monitor.RATE_RESET, help="back below this = pace fine again")
     a = ap.parse_args()
 

@@ -2,6 +2,7 @@
 
  - syllables/s >= 5.0 (and speaking)  -> pace_too_fast  (snail on screen + on the Keypad, then a calm mouse vibration)
  - back below 4.3 or silence          -> pace_ok        (snail goes away)
+ - speech level < -25 dBFS            -> speak_up       (yellow duck on screen + mouse tap), back above -22 -> speak_ok
 Detection = the teammate's speech_flagger.py (brain/audio/pace.py). The Keypad also shows an approximate words/minute.
 
     cd brain
@@ -19,13 +20,16 @@ sys.path.insert(0, str(HERE.parents[2]))                       # brain/src
 sys.path.insert(0, str(HERE.parents[3] / "vendor" / "logiinsight"))
 
 from brain.audio.pace import RATE_RESET, RATE_THRESHOLD, FakeSource, MicSource, PaceState, syllables_to_wpm  # noqa: E402
-from brain.bridge.client import PACE_TOO_FAST, CoachClient  # noqa: E402
+from brain.audio.loudness import OK_DBFS, QUIET_DBFS, LoudnessState  # noqa: E402
+from brain.bridge.client import PACE_TOO_FAST, SPEAK_OK, SPEAK_UP, CoachClient  # noqa: E402
 
 
 def add_args(ap):
     ap.add_argument("--mic", default=None, help="microphone number (see: app.py --list). Default: the camera microphone, else the default one")
     ap.add_argument("--fast-rate", type=float, default=RATE_THRESHOLD, help=f"syllables/s that count as too fast (default {RATE_THRESHOLD})")
     ap.add_argument("--ok-rate", type=float, default=RATE_RESET, help=f"back below this = pace fine again (default {RATE_RESET})")
+    ap.add_argument("--quiet-db", type=float, default=QUIET_DBFS, help=f"speech level (dBFS) below which you are too quiet (default {QUIET_DBFS})")
+    ap.add_argument("--ok-db", type=float, default=OK_DBFS, help=f"back above this = loud enough again (default {OK_DBFS})")
     ap.add_argument("--force", action="store_true", help="demo: the plugin skips its notification rules (cooldown etc.)")
     ap.add_argument("--simulate", action="store_true", help="NO microphone: fake talker, normal -> too fast (26-42 s) -> normal")
 
@@ -37,7 +41,7 @@ def run(a, stop, say=print):
 
     if a.simulate:
         src = FakeSource()
-        say("SIMULATION: talks normally, then TOO FAST from 26 s to 42 s, then normal again. "
+        say("SIMULATION: talks normally, TOO QUIET from 8 s to 22 s (duck), TOO FAST from 26 s to 42 s (snail), then normal. "
             "Expected: the snail appears at 26 s, the mouse buzzes ~5 s later, the snail leaves at ~42 s.")
     else:
         try:
@@ -47,7 +51,8 @@ def run(a, stop, say=print):
             return
 
     state = PaceState(a.fast_rate, a.ok_rate)
-    was_fast = False
+    loud = LoudnessState(getattr(a, "quiet_db", QUIET_DBFS), getattr(a, "ok_db", OK_DBFS))
+    was_fast = was_quiet = False
     t0 = time.time()
     t_status = 0.0
     sent = 0
@@ -67,15 +72,25 @@ def run(a, stop, say=print):
                 coach.pace_ok()
                 say(f"[{time.time() - t0:5.1f}s] pace is fine again ({rate:.1f} syllables/s) -> pace_ok")
             was_fast = fast
+            quiet = loud.update(src.loudness, speaking)
+            if quiet:
+                if coach.trigger(SPEAK_UP, loud.severity(src.loudness), force=a.force):
+                    say(f"[{time.time() - t0:5.1f}s] >> too quiet: {src.loudness:.1f} dBFS, speak_up severity {loud.severity(src.loudness):.2f} sent")
+            elif was_quiet:
+                coach.trigger(SPEAK_OK, 1.0)
+                say(f"[{time.time() - t0:5.1f}s] voice is loud enough again -> speak_ok")
+            was_quiet = quiet
             now = time.time()
             if now - t_status >= 3:
                 t_status = now
+                lv = f"{src.loudness:5.1f} dBFS" if src.loudness is not None else "  -    dBFS"
                 say(f"[{int(now - t0):3d}s] rate: {rate:4.1f} syllables/s | speaking: {'yes' if speaking else 'no '} | "
-                    f"{'TOO FAST' if fast else 'ok      '} | plugin: {coach.sent} ok / {coach.failed} failed")
+                    f"{'TOO FAST' if fast else 'ok      '} | level {lv} {'TOO QUIET' if quiet else 'ok       '} | plugin: {coach.sent} ok / {coach.failed} failed")
             stop.wait(0.5)
     finally:
         src.close()
         coach.pace_ok()
+        coach.trigger(SPEAK_OK, 1.0)
         time.sleep(0.3)
     say(f"Done: {sent} pace_too_fast messages sent, plugin accepted {coach.sent}, failed {coach.failed}"
         + (f" (last error: {coach.last_error})" if coach.failed else "") + ".")

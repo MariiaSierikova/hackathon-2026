@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """On-screen pixel animals for the presenter: a snail crawls across the bottom when you speak too fast,
-an owl blinks in the corner until you blink. Click-through, always on top, and hidden from screen sharing.
+an owl blinks in the corner until you blink,
+a yellow duck opens its beak and says "speak up!" when you are too quiet. Click-through, always on top, and hidden from screen sharing.
 
   uv run --project brain python overlay/overlay.py            # follow the Logi plugin (normal use)
   uv run --project brain python overlay/overlay.py --demo owl # show an animal without the plugin
   uv run --project brain python overlay/overlay.py --demo snail
+  uv run --project brain python overlay/overlay.py --demo duck
 """
 import argparse
 import ctypes
@@ -144,6 +146,13 @@ class Overlay(QtWidgets.QWidget):
             x = int(20 + progress * (w - pm.width() - 40))
             p.drawPixmap(x, h - pm.height() - 12, pm)
             self.bubble(p, "slow down!", x + pm.width() // 2, h - pm.height() - 30)
+        elif animal == "duck":
+            frame = "open" if int(age * 1000 / 380) % 2 == 0 else "closed"   # quacks: mouth opens and closes
+            pm = self.pix("duck", frame)
+            hop = int(5 * abs(((age * 2.0) % 2) - 1)) if frame == "open" else 0
+            x, y = 48, h - pm.height() - 12 - hop
+            p.drawPixmap(x, y, pm)
+            self.bubble(p, "speak up!", x + pm.width() + 75, h - pm.height() + 70)   # beside the beak, does not hop
         elif animal == "owl":
             ms = int(age * 1000) % 3200
             frame = "closed" if 2700 <= ms < 2950 else "open"            # blinks every ~3 s
@@ -176,7 +185,7 @@ def start(demo=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--demo", choices=["owl", "snail"], help="loop an animal without the plugin")
+    ap.add_argument("--demo", choices=["owl", "snail", "duck"], help="loop an animal without the plugin")
     a = ap.parse_args()
     app, ov = start(a.demo)  # noqa: F841
     print("Overlay running. Ctrl+C to quit." + (f" (demo: {a.demo})" if a.demo else " Waiting for the plugin."))

@@ -123,10 +123,13 @@ class MicSource:
         channels = max(1, min(2, int(device["max_input_channels"])))
         self.recorder = AudioRingRecorder(device_info=device, samplerate=self.fs, channels=channels, seconds=WINDOW_SEC + 1)
         self.recorder.start()
+        self.loudness = None       # speech level in dBFS of the latest read(), None = not enough speech to judge
 
     def read(self):
         snapshot = self.recorder.snapshot()
         audio = snapshot[0] if isinstance(snapshot, tuple) else snapshot
+        from brain.audio.loudness import estimate_loudness
+        self.loudness = estimate_loudness(audio, self.fs)
         return estimate_speech_rate(audio, self.fs)
 
     def close(self):
@@ -141,12 +144,15 @@ class FakeSource:
 
     # (start second, syllables per second, speaking)
     SCHEDULE = [(0, 4.0, True), (26, 6.2, True), (42, 3.8, True), (47, 0.0, False)]
+    # (start second, speech level dBFS): normal, TOO QUIET 8-22 s, normal again
+    LOUDNESS = [(0, -18.0), (8, -33.0), (22, -18.0)]
     DURATION = 50
 
     def __init__(self):
         import time
         self.t0 = time.time()
         self._time = time
+        self.loudness = None
 
     @property
     def finished(self):
@@ -155,6 +161,7 @@ class FakeSource:
     def read(self):
         t = self._time.time() - self.t0
         rate, speaking = 4.0, True
+        self.loudness = next(db for start, db in reversed(self.LOUDNESS) if t >= start) if t < 47 else None
         for start, r, sp in self.SCHEDULE:
             if t >= start:
                 rate, speaking = r, sp
