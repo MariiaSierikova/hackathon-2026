@@ -3,7 +3,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
     using System;
 
     // Everything that reacts to a trigger (haptics, Keypad widgets, overlay) subscribes here.
-    public record TriggerMessage(String Trigger, Double Severity);
+    public record TriggerMessage(String Trigger, Double Severity, Boolean Force = false);   // Force = development only: skip the notification policy
 
     public static class TriggerBus
     {

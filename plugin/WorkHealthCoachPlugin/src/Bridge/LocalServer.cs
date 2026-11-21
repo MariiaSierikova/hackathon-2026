@@ -147,8 +147,9 @@ namespace Loupedeck.WorkHealthCoachPlugin
                         return;
                     }
 
-                    PluginLog.Info($"Trigger received: {trigger} severity={severity}");
-                    TriggerBus.Publish(new TriggerMessage(trigger, severity));
+                    var force = root.TryGetProperty("force", out var f) && f.ValueKind == JsonValueKind.True;
+                    PluginLog.Info($"Trigger received: {trigger} severity={severity}{(force ? " FORCE" : String.Empty)}");
+                    TriggerBus.Publish(new TriggerMessage(trigger, severity, force));
                     await Reply(ctx, 200, "{\"ok\":true}");
                 }
                 else

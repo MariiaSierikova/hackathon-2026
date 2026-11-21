@@ -121,6 +121,13 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
         public static Decision Decide(TriggerMessage m, DateTime now)
         {
+            if (m.Force)
+            {
+                // Development switch: show/buzz everything, ignore cooldowns, budget and snooze, leave the policy state untouched.
+                PluginLog.Info($"Policy: {m.Trigger} FORCED (policy skipped)");
+                return new Decision(m, Settings.HapticStrength != "off", true, true, Settings.HapticStrength);
+            }
+
             if (!Settings.Triggers.TryGetValue(m.Trigger, out var rule))
             {
                 return Drop(m, "no rule");

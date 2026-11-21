@@ -18,7 +18,7 @@ One Keypad key ("Coach screen", group **Coach**) opens a folder that uses all 9 
 Any key press while a reminder shows dismisses it (counts toward the coach getting quieter).
 
 Camera side contract (new): send `blink_detected` every time a blink is seen; the eye reminder stops by itself.
-`python3 scripts/trigger.py blink_low` then `python3 scripts/trigger.py blink_detected` to try it.
+Testing: run `python3 scripts/trigger.py blink_low --force` ALONE, look at the Keypad, then `python3 scripts/trigger.py blink_detected`. (`--force` skips cooldown/budget/snooze; without it the policy may drop repeats.)
 
 ## Art
 `scripts/gen_sprites.py` draws eye / snail / owl sprites -> `assets/sprites.json` (used by the on-screen overlay) and
@@ -29,7 +29,7 @@ Run: `uv run --project brain --with pillow python scripts/gen_sprites.py`.
 Options+ -> MX Keypad -> All Actions -> "Coach screen" -> drag onto a key, press it to open the folder. Then:
 ```bash
 python3 scripts/trigger.py --wpm 172
-python3 scripts/trigger.py blink_low      # eye blinks on all 9 keys
+python3 scripts/trigger.py blink_low --force   # eye blinks on all 9 keys (run alone)
 python3 scripts/trigger.py blink_detected # ...and stops
 python3 scripts/trigger.py pace_too_fast  # snail crawls (the mouse buzzes after 5 s if repeated: escalation)
 ```

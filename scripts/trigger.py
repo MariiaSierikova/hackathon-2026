@@ -5,6 +5,7 @@
   python3 scripts/trigger.py pace_too_fast
   python3 scripts/trigger.py blink_low --severity 0.6
   python3 scripts/trigger.py --wpm 185          # feed the pace meter
+  python3 scripts/trigger.py blink_low --force  # testing: skip cooldown/budget/snooze
 """
 import argparse
 import json
@@ -28,6 +29,7 @@ def main():
     ap.add_argument("trigger", nargs="?", help="trigger name, e.g. pace_too_fast")
     ap.add_argument("--severity", type=float, default=1.0, help="0.0-1.0 (default 1.0)")
     ap.add_argument("--list", action="store_true", help="list available triggers")
+    ap.add_argument("--force", action="store_true", help="testing only: ignore the notification policy")
     ap.add_argument("--wpm", type=float, help="set the pace meter value (words per minute)")
     a = ap.parse_args()
     try:
@@ -36,7 +38,7 @@ def main():
         elif a.list or not a.trigger:
             print("\n".join(call("/triggers")["triggers"]))
         else:
-            print(call("/trigger", {"trigger": a.trigger, "severity": a.severity}))
+            print(call("/trigger", {"trigger": a.trigger, "severity": a.severity, **({"force": True} if a.force else {})}))
     except urllib.error.HTTPError as e:
         print("Server said:", e.read().decode(), file=sys.stderr)
         sys.exit(1)
