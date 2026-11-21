@@ -142,6 +142,42 @@ uv run python src\brain\probes\blink_probe.py --device N --seconds 60
 ```
 Each detected blink should now give **one soft tap** on the mouse. Tell us whether taps and blinks match, and roughly how late the tap feels.
 
+## "Cannot reach the plugin on 127.0.0.1:8787" (Part B, step B3)
+This means the plugin is not running or not loaded. Check in this order (PowerShell):
+
+**1. Get the latest code and rebuild** (a Windows-specific server bug was fixed on 2026-11-21):
+```powershell
+cd C:\LauzHack\hackathon-2026     # your project folder
+git pull
+cd plugin\WorkHealthCoachPlugin\src
+dotnet build -c Debug
+```
+Then in Logi Options+ -> Settings -> **Restart Logi Plugin Service**, wait 15 seconds, and try `uv run python ..\scripts\trigger.py --list` again.
+
+**2. Is the plugin linked?** This should print a folder path ending in `bin\Debug`:
+```powershell
+Get-Content "$env:LOCALAPPDATA\Logi\LogiPluginService\Plugins\WorkHealthCoachPlugin.link"
+```
+"Cannot find path" = the build did not create the link: make the folder (B1) and run `dotnet build -c Debug` again.
+
+**3. What does the plugin say?** (the most useful check):
+```powershell
+Get-Content "$env:LOCALAPPDATA\Logi\LogiPluginService\Logs\plugin_logs\WorkHealthCoach.log" -Tail 30
+```
+- `LocalServer listening on http://127.0.0.1:8787/` = OK, the plugin runs.
+- `LocalServer could not start ...` = port 8787 is used by another program: `netstat -ano | findstr 8787`.
+- No `WorkHealthCoach.log` file at all = the Plugin Service never loaded it. Usually Logi Options+ is too old: the plugin needs
+  **Logi Plugin Service 6.4 or newer (.NET 10)**. Update Logi Options+ (Settings -> About / check for updates) and restart the service.
+  Check the version: `(Get-Item "C:\Program Files\Logi\LogiPluginService\PluginApi.dll").VersionInfo.FileVersion`
+
+**4. Is anything listening?**
+```powershell
+netstat -ano | findstr 8787
+```
+A line with `LISTENING` = the server is up (then it is a firewall/VPN problem: try `Invoke-RestMethod http://127.0.0.1:8787/health`).
+
+Send back the output of steps 2 and 3 if it still fails.
+
 ## If something goes wrong
 | Problem | What to do |
 |---|---|
