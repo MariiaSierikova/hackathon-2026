@@ -81,6 +81,11 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 {
                     await Reply(ctx, 200, "{\"ok\":true}");
                 }
+                else if (method == "GET" && path == "/overlay")
+                {
+                    var (animal, age) = SessionState.OverlaySnapshot();
+                    await Reply(ctx, 200, $"{{\"animal\":{(animal == null ? "null" : $"\"{animal}\"")},\"ageMs\":{age}}}");
+                }
                 else if (method == "GET" && path == "/triggers")
                 {
                     var names = String.Join(",", Triggers.All.Select(n => $"\"{n}\""));

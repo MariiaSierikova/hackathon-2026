@@ -65,6 +65,11 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 SessionState.OnTrigger(d.Message);
             }
 
+            if (d.Overlay)
+            {
+                SessionState.OnOverlay(d.Message);
+            }
+
             if (d.Haptic)
             {
                 HapticPlayer.Play(d.Message.Trigger, d.HapticStrength);

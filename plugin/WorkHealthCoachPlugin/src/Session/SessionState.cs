@@ -44,6 +44,53 @@ namespace Loupedeck.WorkHealthCoachPlugin
         private static DateTime _behindUntil = DateTime.MinValue;
         public static Boolean BehindActive => DateTime.UtcNow < _behindUntil;
 
+        // ---- on-screen animal (separate from the Keypad: the policy can allow one and not the other) ----
+        private static String _overlayAnimal;
+        private static DateTime _overlayStart;
+        private static DateTime _overlayUntil = DateTime.MinValue;
+
+        public static (String animal, Int64 ageMs) OverlaySnapshot()
+        {
+            var now = DateTime.UtcNow;
+            return now < _overlayUntil && _overlayAnimal != null
+                ? (_overlayAnimal, (Int64)(now - _overlayStart).TotalMilliseconds)
+                : (null, 0);
+        }
+
+        public static void OnOverlay(TriggerMessage m)
+        {
+            var now = DateTime.UtcNow;
+            switch (m.Trigger)
+            {
+                case "pace_too_fast":
+                    if (_overlayAnimal != "snail" || now >= _overlayUntil)
+                    {
+                        _overlayStart = now;
+                    }
+
+                    _overlayAnimal = "snail";
+                    _overlayUntil = now.AddSeconds(15);
+                    break;
+                case "blink_low":
+                    if (_overlayAnimal != "owl" || now >= _overlayUntil)
+                    {
+                        _overlayStart = now;
+                    }
+
+                    _overlayAnimal = "owl";
+                    _overlayUntil = now.AddSeconds(90);   // until you blink
+                    break;
+            }
+        }
+
+        private static void ClearOverlay(String animal = null)
+        {
+            if (animal == null || _overlayAnimal == animal)
+            {
+                _overlayUntil = DateTime.MinValue;
+            }
+        }
+
         public static Boolean TakeoverActive => EyeAlertActive || PaceAlertActive || TimeAlertActive || BehindActive;
 
         // ---- last alert ----
@@ -152,6 +199,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
             _paceAlertUntil = DateTime.MinValue;
             _timeAlertUntil = DateTime.MinValue;
             _behindUntil = DateTime.MinValue;
+            ClearOverlay();
             Raise();
         }
 
@@ -202,12 +250,14 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public static void ClearBlinkAlert()
         {
             _eyeAlert = false;
+            ClearOverlay("owl");
             Raise();
         }
 
         public static void ClearPaceAlert()
         {
             _paceAlertUntil = DateTime.MinValue;
+            ClearOverlay("snail");
             Raise();
         }
     }
