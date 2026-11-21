@@ -1,0 +1,18 @@
+displayName: Work Health Coach
+description: Haptic pulses used by the coach to nudge you (pace, blinking, eye contact, time, people behind you)
+events:
+    - name: pulseSoft
+      displayName: Soft pulse
+      description: Light tap, used for gentle reminders (blink, eye contact)
+    - name: pulseCalm
+      displayName: Calm pulse
+      description: Slow wave, repeated for "slow down"
+    - name: pulseSharp
+      displayName: Sharp pulse
+      description: Quick crisp tap, used for time warnings
+    - name: pulseKnock
+      displayName: Knock
+      description: Knocking pattern, used when someone is behind you
+    - name: pulseDone
+      displayName: Done pulse
+      description: Task completed (20-20-20 break finished)

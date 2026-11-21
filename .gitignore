@@ -1,0 +1,13 @@
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets (never commit camera credentials)
+.env
+*.env
