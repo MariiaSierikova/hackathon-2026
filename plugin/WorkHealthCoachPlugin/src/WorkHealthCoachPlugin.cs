@@ -32,13 +32,30 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
             // Haptics subscribe to triggers. Keypad widgets and the notification policy plug in here later.
             NotificationPolicy.Init();
-            TriggerBus.Received += NotificationPolicy.Evaluate;       // raw trigger -> policy
+            TriggerBus.Received += OnRaw;                              // raw trigger -> (controls) or policy
             NotificationPolicy.Decided += OnDecided;                  // policy -> outputs
             this._server.Start();
 
             this._tick = new System.Timers.Timer(1000) { AutoReset = true };
             this._tick.Elapsed += (_, _) => SessionState.Tick();
             this._tick.Start();
+        }
+
+        // "blink_detected" / "pace_ok" are not alerts: they end an active reminder, so they skip the policy.
+        private static void OnRaw(TriggerMessage m)
+        {
+            switch (m.Trigger)
+            {
+                case "blink_detected":
+                    SessionState.ClearBlinkAlert();
+                    break;
+                case "pace_ok":
+                    SessionState.ClearPaceAlert();
+                    break;
+                default:
+                    NotificationPolicy.Evaluate(m);
+                    break;
+            }
         }
 
         private static void OnDecided(Decision d)
@@ -57,7 +74,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
         // This method is called when the plugin is unloaded.
         public override void Unload()
         {
-            TriggerBus.Received -= NotificationPolicy.Evaluate;
+            TriggerBus.Received -= OnRaw;
             NotificationPolicy.Decided -= OnDecided;
             this._tick?.Stop();
             this._server.Stop();

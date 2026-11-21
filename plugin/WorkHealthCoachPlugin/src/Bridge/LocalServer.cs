@@ -83,7 +83,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 }
                 else if (method == "GET" && path == "/triggers")
                 {
-                    var names = String.Join(",", HapticPlayer.PatternNames.Select(n => $"\"{n}\""));
+                    var names = String.Join(",", Triggers.All.Select(n => $"\"{n}\""));
                     await Reply(ctx, 200, $"{{\"triggers\":[{names}]}}");
                 }
                 else if (method == "GET" && path == "/settings")
@@ -141,7 +141,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     var trigger = root.TryGetProperty("trigger", out var t) ? t.GetString() : null;
                     var severity = root.TryGetProperty("severity", out var s) && s.TryGetDouble(out var d) ? d : 1.0;
 
-                    if (String.IsNullOrEmpty(trigger) || !HapticPlayer.PatternNames.Contains(trigger))
+                    if (String.IsNullOrEmpty(trigger) || !Triggers.IsKnown(trigger))
                     {
                         await Reply(ctx, 400, "{\"error\":\"unknown or missing trigger\"}");
                         return;
@@ -176,5 +176,22 @@ namespace Loupedeck.WorkHealthCoachPlugin
             await ctx.Response.OutputStream.WriteAsync(bytes);
             ctx.Response.Close();
         }
+    }
+}
+
+namespace Loupedeck.WorkHealthCoachPlugin
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+
+    // Every trigger name the plugin accepts.
+    public static class Triggers
+    {
+        public static readonly String[] Controls = { "blink_detected", "pace_ok" };
+
+        public static IEnumerable<String> All => HapticPlayer.PatternNames.Concat(Controls);
+
+        public static Boolean IsKnown(String name) => All.Contains(name);
     }
 }

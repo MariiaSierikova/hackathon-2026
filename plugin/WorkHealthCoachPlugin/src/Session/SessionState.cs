@@ -1,8 +1,7 @@
 namespace Loupedeck.WorkHealthCoachPlugin
 {
     using System;
-    using System.Threading.Tasks;
-
+    
     // Shared state behind the Keypad widgets: presentation timers, pace, blink animation, last alert.
     public static class SessionState
     {
@@ -30,9 +29,22 @@ namespace Loupedeck.WorkHealthCoachPlugin
         private static DateTime _paceFastUntil = DateTime.MinValue;
         public static Boolean PaceIsFast => DateTime.UtcNow < _paceFastUntil;
 
-        // ---- eye ----
-        public static Double EyeOpenness { get; private set; } = 1.0;   // 1 open, 0 closed
-        public static Boolean BlinkReminderActive { get; private set; }
+        // ---- full-Keypad alerts (each has a start time and ends by itself or when cleared) ----
+        public static DateTime EyeAlertStart { get; private set; }
+        private static Boolean _eyeAlert;
+        public static Boolean EyeAlertActive => _eyeAlert && (DateTime.UtcNow - EyeAlertStart).TotalSeconds < 90;   // until you blink, max 90 s
+
+        public static DateTime PaceAlertStart { get; private set; }
+        private static DateTime _paceAlertUntil = DateTime.MinValue;
+        public static Boolean PaceAlertActive => DateTime.UtcNow < _paceAlertUntil;
+
+        private static DateTime _timeAlertUntil = DateTime.MinValue;
+        public static Boolean TimeAlertActive => DateTime.UtcNow < _timeAlertUntil;
+
+        private static DateTime _behindUntil = DateTime.MinValue;
+        public static Boolean BehindActive => DateTime.UtcNow < _behindUntil;
+
+        public static Boolean TakeoverActive => EyeAlertActive || PaceAlertActive || TimeAlertActive || BehindActive;
 
         // ---- last alert ----
         public static String LastTrigger { get; private set; }
@@ -127,7 +139,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 TriggerBus.Publish(new TriggerMessage("time_warning", 1.0));
             }
 
-            if (Running || AlertActive || PaceIsFast)
+            if (Running || AlertActive || PaceIsFast || TakeoverActive)
             {
                 Raise();
             }
@@ -136,6 +148,10 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public static void DismissAlert()
         {
             LastTrigger = null;
+            _eyeAlert = false;
+            _paceAlertUntil = DateTime.MinValue;
+            _timeAlertUntil = DateTime.MinValue;
+            _behindUntil = DateTime.MinValue;
             Raise();
         }
 
@@ -145,46 +161,54 @@ namespace Loupedeck.WorkHealthCoachPlugin
             Raise();
         }
 
-        // Updates widget state from any trigger.
+        // Updates screen state from a trigger the policy let through.
         public static void OnTrigger(TriggerMessage m)
         {
             LastTrigger = m.Trigger;
             LastTriggerAt = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
 
-            if (m.Trigger == "pace_too_fast")
+            switch (m.Trigger)
             {
-                _paceFastUntil = DateTime.UtcNow.AddSeconds(20);
-            }
-            else if (m.Trigger == "blink_low")
-            {
-                _ = AnimateBlinkAsync();
+                case "pace_too_fast":
+                    _paceFastUntil = now.AddSeconds(20);
+                    if (!PaceAlertActive)
+                    {
+                        PaceAlertStart = now;
+                    }
+
+                    _paceAlertUntil = now.AddSeconds(15);
+                    break;
+                case "blink_low":
+                    if (!EyeAlertActive)
+                    {
+                        EyeAlertStart = now;
+                    }
+
+                    _eyeAlert = true;
+                    break;
+                case "time_warning":
+                    _timeAlertUntil = now.AddSeconds(10);
+                    break;
+                case "person_behind":
+                    _behindUntil = now.AddSeconds(12);
+                    break;
             }
 
             Raise();
         }
 
-        // Two quick blinks, then keeps a "blink" hint for a few seconds.
-        private static async Task AnimateBlinkAsync()
+        // The user blinked: the eye reminder is done.
+        public static void ClearBlinkAlert()
         {
-            try
-            {
-                BlinkReminderActive = true;
-                Double[] frames = { 1.0, 0.5, 0.0, 0.5, 1.0, 1.0, 0.5, 0.0, 0.5, 1.0 };
-                foreach (var f in frames)
-                {
-                    EyeOpenness = f;
-                    Raise();
-                    await Task.Delay(130);
-                }
+            _eyeAlert = false;
+            Raise();
+        }
 
-                await Task.Delay(2500);
-            }
-            finally
-            {
-                EyeOpenness = 1.0;
-                BlinkReminderActive = false;
-                Raise();
-            }
+        public static void ClearPaceAlert()
+        {
+            _paceAlertUntil = DateTime.MinValue;
+            Raise();
         }
     }
 }

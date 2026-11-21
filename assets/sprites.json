@@ -1,0 +1,359 @@
+{
+ "eye": {
+  "palette": {
+   "k": [
+    40,
+    36,
+    60
+   ],
+   "w": [
+    255,
+    255,
+    255
+   ],
+   "b": [
+    120,
+    180,
+    255
+   ],
+   "n": [
+    70,
+    120,
+    220
+   ],
+   "d": [
+    22,
+    22,
+    48
+   ],
+   "p": [
+    255,
+    150,
+    175
+   ]
+  },
+  "frames": {
+   "open": [
+    "........k.............................k.......",
+    "........kk...........................kk.......",
+    "....k...kkk.........................kkk...k...",
+    "....kk..kkk.........................kkk..kk...",
+    "....kkk..kkk.......................kkk..kkk...",
+    ".....kkk..kkk.....................kkk..kkk....",
+    "k.k...kkk.kkk..kkkkkkkkkkkkkkkk...kkk.kkk...k.",
+    ".kk...kkk..kkkkkkkkkkkkkkkkkkkkkkkkk..kkk...kk",
+    "kkkk...kkk.kkkkkkkkkkkkkkkkkkkkkkkk..kkk...kkk",
+    "..kkk...kkkkkkkwwwwwwwwwwwwwwwwkkkkkkkk...kkk.",
+    "...kkk..kkkkkwwwwwwwwwnnwwwwwwwwwkkkkk...kkk..",
+    "....kkkkkkkwwwwwwwwnnnnnnnnwwwwwwwwkkkk.kkk...",
+    ".....kkkkwwwwwwwwwnnnbbbbnnnwwwwwwwwwkkkkk....",
+    ".....kkkwwwwwwwwwnnbbbbbbbbnnwwwwwwwwwkkk.....",
+    "....kkkwkwwwwwwwnnbbwbbbbbbbnnwwwwwwwwkkkk....",
+    "....kkkwwwwwwwwwnnbbbddddbbbnnwwwwwwwwwkkk....",
+    "...kkkwwwwwwwwwwnbbbwdddddbbbnwwwwwwwwwwkkk...",
+    "...kkkwwwwwwwwwnnbbbddddddbbbnnwwwwwwwwwkkk...",
+    "...kkkwwwwwwwwwnnbbbddddddbbbnnwwwwwwwwwkkk...",
+    "...kkkwwwwwwwwwwnbbbddddddbbbnwwwwwwwwwwkkk...",
+    "....kkkwwwwwwwwwnnbbbdddwbwbnnwwwwwwwwwkkk....",
+    "....kkkwwwwwwwwwnnbbbbbbbbbbnnwwwwwwwwwkkk....",
+    ".....kkkwwwwwwwwwnnbbbbbbbbnnwwwwwwwwwkkk.....",
+    "......kkkwwwwwwwwwnnnbbbbnnnwwwwwwwwwkkk......",
+    ".......kkkkwwwwwwwwnnnnnnnnwwwwwwwwkkkk.......",
+    "........kkkkkwwwwwwwwwnnwwwwwwwwwkkkkk........",
+    ".........kkkkkkwwwwwwwwwwwwwwwwkkkkkk.........",
+    "...........kkkkkkkkkkkkkkkkkkkkkkkk...........",
+    ".............kkkkkkkkkkkkkkkkkkkk.............",
+    "...............kkkkkkkkkkkkkkkk...............",
+    "..............................................",
+    ".............................................."
+   ],
+   "half": [
+    "........k.............................k.......",
+    "........kk...........................kk.......",
+    "....k...kkk.........................kkk...k...",
+    "....kk..kkk.........................kkk..kk...",
+    "....kkk..kkk.......................kkk..kkk...",
+    ".....kkk..kkk.....................kkk..kkk....",
+    "k.k...kkk.kkk.....................kkk.kkk...k.",
+    ".kk...kkk..kkk...................kkk..kkk...kk",
+    "kkkk...kkk..kkk.................kkk..kkk...kkk",
+    "..kkk...kkk.........................kkk...kkk.",
+    "...kkk...kk.......kkkkkkkkkk........kk...kkk..",
+    "....kkk.....kkkkkkkkkkkkkkkkkkkkkk......kkk...",
+    ".....kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.kkkk....",
+    "......kkkkkkkkkkkknbbbbbbbbnkkkkkkkkkkkkk.....",
+    "......kkkkkkwwwwnnbbwbbbbbbbnnwwwwkkkkkkk.....",
+    ".....kkkkwwwwwwwnnbbbddddbbbnnwwwwwwwkkkk.....",
+    "....kkkwwwwwwwwwnbbbwdddddbbbnwwwwwwwwwkkk....",
+    "...kkkwwwwwwwwwnnbbbddddddbbbnnwwwwwwwwwkkk...",
+    "...kkkwwwwwwwwwnnbbbddddddbbbnnwwwwwwwwwkkk...",
+    "....kkkwwwwwwwwwnbbbddddddbbbnwwwwwwwwwkkk....",
+    ".....kkkkwwwwwwwnnbbbdddwbwbnnwwwwwwwkkkk.....",
+    "......kkkkkkwwwwnnbbbbbbbbbbnnwwwwkkkkkk......",
+    ".......kkkkkkkkkkknbbbbbbbbnkkkkkkkkkkk.......",
+    ".........kkkkkkkkkkkkkkkkkkkkkkkkkkkk.........",
+    "............kkkkkkkkkkkkkkkkkkkkkk............",
+    "..................kkkkkkkkkk..................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    ".............................................."
+   ],
+   "closed": [
+    "..............................................",
+    "..............................................",
+    "........k.............................k.......",
+    "........kk...........................kk.......",
+    "....k...kkk.........................kkk...k...",
+    "....kk..kkk.........................kkk..kk...",
+    "....kkk..kkk.......................kkk..kkk...",
+    ".....kkk..kkk.....................kkk..kkk....",
+    "k.k...kkk.kkk.....................kkk.kkk...k.",
+    ".kk...kkk..kkk...................kkk..kkk...kk",
+    "kkkk...kkk..kkk.................kkk..kkk...kkk",
+    "..kkk...kkk.........................kkk...kkk.",
+    "...kkk...kk.........................kk...kkk..",
+    "....kkk.................................kkk...",
+    ".....kkkk.............................kkkk....",
+    ".....kkk..............................kkk.....",
+    ".....kkkkk..........................kkkkk.....",
+    ".....kkkkkkkk....................kkkkkkkk.....",
+    ".......kkkkkkkkk..............kkkkkkkkk.......",
+    "........kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk........",
+    "..........kkkkkkkkkkkkkkkkkkkkkkkkkk..........",
+    ".............kkkkkkkkkkkkkkkkkkkk.............",
+    "................kkkkkkkkkkkkkk................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    "..............................................",
+    ".............................................."
+   ]
+  }
+ },
+ "snail": {
+  "palette": {
+   "k": [
+    60,
+    40,
+    40
+   ],
+   "o": [
+    250,
+    175,
+    70
+   ],
+   "s": [
+    214,
+    120,
+    50
+   ],
+   "g": [
+    190,
+    225,
+    150
+   ],
+   "w": [
+    255,
+    255,
+    255
+   ],
+   "d": [
+    30,
+    25,
+    45
+   ],
+   "p": [
+    255,
+    150,
+    170
+   ]
+  },
+  "frames": {
+   "a": [
+    "........................................",
+    "..............kkkkkkk......kk.......kk..",
+    "............kkoooooookk...kwwk.....kwwk.",
+    "...........koooooooooook.kwwwwk...kwwwwk",
+    "..........kooosssssssoookkwwdwk...kwwdwk",
+    ".........kooosssooosssoookwwdwk...kwwdwk",
+    "........koosssooooooosssookwwk.....kwwk.",
+    ".......kooossooosssooossooogggk...kgggk.",
+    ".......koossoosssssssoossookggk...kggk..",
+    "......kooosooossooossoooooooggk...kggk..",
+    "......koossoossooooosoooooooggkkkkkggk..",
+    "......koossoosooossooooooooogggggggggk..",
+    "......koossoosooooooooooooooggggggggk...",
+    "......koossoossooooossooooooggggggggk...",
+    "......kooosooossooossooosooogggggggggk..",
+    ".......koossoosssssssoossooggggggggggk..",
+    ".......kooossooosssooossoooggggggggggk..",
+    "........koosssooooooosssoogggppggggggk..",
+    ".....kkkkgooosssooosssoooggggppggdggdk..",
+    "...kkggggggooosssssssoooggggggggggddk...",
+    "..kgggggggggoooooooooooggggggggggggk....",
+    ".kggggggggggggoooooooggggggggggggggk....",
+    "..kgggggggggggggggggggggggggggggggk.....",
+    "...kkgggggggggggggggggggggggggggkk......",
+    ".....kkkkgggggggggggggggggggkkkk........",
+    ".........kkkkkkkkkkkkkkkkkkk............"
+   ],
+   "b": [
+    "........................................",
+    "..............kkkkkkk.......kk.....kk...",
+    "............kkoooooookk....kwwk...kwwk..",
+    "...........koooooooooook..kwwwwk.kwwwwk.",
+    "..........kooosssssssoook.kwwdwk.kwwdwk.",
+    ".........kooosssooosssoookkwwdwk.kwwdwk.",
+    "........koosssooooooosssookkwwk...kwwk..",
+    ".......kooossooosssooossoookggk...kggk..",
+    ".......koossoosssssssoossookggk...kggk..",
+    "......kooosooossooossooooooogggk.kgggk..",
+    "......koossoossooooosoooooookggkkkggk...",
+    "......koossoosooossoooooooookgggggggk...",
+    "......koossoosooooooooooooooggggggggk...",
+    "......koossoossooooossooooooggggggggk...",
+    "......kooosooossooossooosooogggggggggk..",
+    ".......koossoosssssssoossooggggggggggk..",
+    ".......kooossooosssooossoooggggggggggk..",
+    "........koosssooooooosssoogggppggggggk..",
+    ".....kkkkgooosssooosssoooggggppggdggdk..",
+    "...kkggggggooosssssssoooggggggggggddk...",
+    "..kgggggggggoooooooooooggggggggggggk....",
+    ".kggggggggggggoooooooggggggggggggggk....",
+    "..kgggggggggggggggggggggggggggggggk.....",
+    "...kkgggggggggggggggggggggggggggkk......",
+    ".....kkkkgggggggggggggggggggkkkk........",
+    ".........kkkkkkkkkkkkkkkkkkk............"
+   ]
+  }
+ },
+ "owl": {
+  "palette": {
+   "k": [
+    50,
+    36,
+    40
+   ],
+   "r": [
+    160,
+    108,
+    74
+   ],
+   "R": [
+    120,
+    78,
+    54
+   ],
+   "c": [
+    245,
+    224,
+    180
+   ],
+   "w": [
+    255,
+    255,
+    255
+   ],
+   "d": [
+    28,
+    24,
+    44
+   ],
+   "y": [
+    255,
+    176,
+    60
+   ],
+   "p": [
+    255,
+    150,
+    170
+   ]
+  },
+  "frames": {
+   "open": [
+    "..................................",
+    "..................................",
+    "....kkkkkk..............kkkkkk....",
+    "...krrrrrrk............krrrrrrk...",
+    "....krrrrrkkkkkkkkkkkkkkrrrrrk....",
+    ".....krrrrkrrrrrrrrrrrrkrrrrk.....",
+    "......krrrrrrrrrrrrrrrrrrrrk......",
+    "......krrrrrrrrrrrrrrrrrrrrk......",
+    ".....krrrrrrrrrrrrrrrrrrrrrrk.....",
+    "....krrrrwwwrrrrrrrrrrwwwrrrrk....",
+    "....krrwwwwwwwrrrrrrwwwwwwwrrk....",
+    "...krrrwwwwwwwwrrrrwwwwwwwwrrrk...",
+    "...krrwwwwddwwwwrrwwwwddwwwwrrk...",
+    "...krrwwwwwddwwwrrwwwdwwdwwwrrk...",
+    "..krrrwwdddddwwwrrwwwdddddwwrrrk..",
+    "...krrwwdddddwwwrrwwwdddddwwrrk...",
+    "..kkrrwwwddddwwwrrwwwddddwwwrrkk..",
+    ".kRRRRrwwwddwwwrrrrwwwddwwwrRRRRk.",
+    ".kRRRRrpwwwwwwccyyycwwwwwwprRRRRk.",
+    ".kRRRRpppwwwccccyyccccwwwpppRRRRk.",
+    "kRRRRRRprrrcccccyccccccrrrpRRRRRRk",
+    "kRRRRRRrrrrccccccccccccrrrrRRRRRRk",
+    "kRRRRRRrrrccccccccccccccrrrRRRRRRk",
+    "kRRRRRRrrrcrccccrcccccrcrrrRRRRRRk",
+    "kRRRRRRrrcrcrccrcrcccrcrcrrRRRRRRk",
+    "kRRRRRRrrccccccccccccccccrrRRRRRRk",
+    "kRRRRRRrrccccccccccccccccrrRRRRRRk",
+    "kRRRRRRrrccrccccrcccccrccrrRRRRRRk",
+    "kRRRRRRrrcrcrccrcrcccrcrcrrRRRRRRk",
+    ".kRRRRrrrrccccccccccccccrrrrRRRRk.",
+    ".kRRRRkrrrccccccccccccccrrrkRRRRk.",
+    ".kRRRRkkrrrrccccrcccccrrrrkkRRRRk.",
+    "..kkkk..krrcrccrcrcccrcrrk..kkkk..",
+    ".........kkycycyccccycykyk........",
+    "..........kykycyccccykykyk........",
+    "...........k.kkkkkkkk.k.k........."
+   ],
+   "closed": [
+    "..................................",
+    "..................................",
+    "....kkkkkk..............kkkkkk....",
+    "...krrrrrrk............krrrrrrk...",
+    "....krrrrrkkkkkkkkkkkkkkrrrrrk....",
+    ".....krrrrkrrrrrrrrrrrrkrrrrk.....",
+    "......krrrrrrrrrrrrrrrrrrrrk......",
+    "......krrrrrrrrrrrrrrrrrrrrk......",
+    ".....krrrrrrrrrrrrrrrrrrrrrrk.....",
+    "....krrrrrrrrrrrrrrrrrrrrrrrrk....",
+    "....krrrrrrrrrrrrrrrrrrrrrrrrk....",
+    "...krrrrrrrrrrrrrrrrrrrrrrrrrrk...",
+    "...krrrrrrrrrrrrrrrrrrrrrrrrrrk...",
+    "...krrrrrrrrrrrrrrrrrrrrrrrrrrk...",
+    "..krrdrrrrrrrrrdrrdrrrrrrrrrdrrk..",
+    "...krddrrrrrrrddrrddrrrrrrrddrk...",
+    "..kkrrdddrrrdddrrrrdddrrrdddrrkk..",
+    ".kRRRRrdrdddrdrrrrrrdrdddrdrRRRRk.",
+    ".kRRRRrpdddddrccyyycrdddddprRRRRk.",
+    ".kRRRRppprrrccccyyccccrrrpppRRRRk.",
+    "kRRRRRRprrrcccccyccccccrrrpRRRRRRk",
+    "kRRRRRRrrrrccccccccccccrrrrRRRRRRk",
+    "kRRRRRRrrrccccccccccccccrrrRRRRRRk",
+    "kRRRRRRrrrcrccccrcccccrcrrrRRRRRRk",
+    "kRRRRRRrrcrcrccrcrcccrcrcrrRRRRRRk",
+    "kRRRRRRrrccccccccccccccccrrRRRRRRk",
+    "kRRRRRRrrccccccccccccccccrrRRRRRRk",
+    "kRRRRRRrrccrccccrcccccrccrrRRRRRRk",
+    "kRRRRRRrrcrcrccrcrcccrcrcrrRRRRRRk",
+    ".kRRRRrrrrccccccccccccccrrrrRRRRk.",
+    ".kRRRRkrrrccccccccccccccrrrkRRRRk.",
+    ".kRRRRkkrrrrccccrcccccrrrrkkRRRRk.",
+    "..kkkk..krrcrccrcrcccrcrrk..kkkk..",
+    ".........kkycycyccccycykyk........",
+    "..........kykycyccccykykyk........",
+    "...........k.kkkkkkkk.k.k........."
+   ]
+  }
+ }
+}
