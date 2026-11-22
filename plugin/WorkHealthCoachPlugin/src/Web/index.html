@@ -274,7 +274,7 @@ const FEATURES = [
    {g:"Camera",k:"cam",label:"Pause when I leave, resume when I return",type:"toggle",def:true,help:"Uses the camera to see whether you are at the desk."},
    {k:"reset",label:"Reset the timer if away for",unit:" min",min:1,max:30,step:1,def:5,dep:"cam",help:"Away 5 min or more means you already took a break."}],
   texts:[["text","Session finished","Focus session done. Take a break"],["text2","Break finished","Break over. Back to focus"]],
-  cd:{def:0,min:0,max:120,note:"Fires once per cycle by design."},def:{on:false,ch:{screen:1,haptic:1},sound:"rise",haptic:"jingle",color:"#ff4d4f",effect:"steady"}},
+  cd:{def:180,min:0,max:900,note:"The reminder repeats this often until you take a break."},def:{on:false,ch:{screen:1,haptic:1},sound:"rise",haptic:"jingle",color:"#ff4d4f",effect:"steady"}},
  {id:"distance",name:"Volume when far",blurb:"Raises volume when you move away, restores it when you return.",
   params:[
    {g:"Detection",k:"shrink",label:"Face box shrinks by",unit:" %",min:10,max:70,step:5,def:30,help:"Compared with your normal sitting distance. Leaving the frame also counts."},

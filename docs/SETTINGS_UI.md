@@ -15,9 +15,9 @@ The page stores one JSON document (`ui-state.json`, next to `settings.json`) thr
 | Page feature | Triggers | Mapped fields |
 |---|---|---|
 | Speech speed | `pace_too_fast` | enabled, cooldown, channels (screen=`Overlay`, keypad=`Visual`, haptics=`Haptic`, audio=`Audio`), haptic pattern + repeat, Keypad colour |
-| Speech volume | `speak_up`, `speak_down` (new) | same |
+| Speech volume | `speak_up` (team's detector + duck), `speak_down` (new) | same |
 | Eye blinking | `blink_low` | same |
-| Pomodoro | `break_due`, `break_over` (new) | same + the timer settings below |
+| Pomodoro | `break_due` (team's Python timer sends it; the plugin timer can too), `break_over` (new) | same + the timer settings below |
 | Volume when far | `volume_far` (new) | same (no default feedback; the volume change is the app's job) |
 | Person behind | `person_behind` | same |
 
@@ -39,7 +39,7 @@ Focus 25 / short 5 / long 15, long break after 4 (all settable). With camera pre
 API: `GET /pomodoro`, `POST /pomodoro/start|stop|toggle|skip|reset|demo-away`, presence: `GET|POST /signal/presence/true|false` or `POST /presence {"atDesk":true}`.
 
 ## API added
-`GET /` page, `GET/POST /ui-state`, `GET /pomodoro`, `POST /pomodoro/<action>`, `POST /presence`, `/signal/presence/<bool>`, and `/trigger` accepts `"only":"haptic|keypad|screen|audio"` together with `"force":true` (test one channel). New trigger names: `speak_up`, `speak_down`, `break_due`, `break_over`, `volume_far`.
+`GET /` page, `GET/POST /ui-state`, `GET /pomodoro`, `POST /pomodoro/<action>`, `POST /presence`, `/signal/presence/<bool>`, and `/trigger` accepts `"only":"haptic|keypad|screen|audio"` together with `"force":true` (test one channel). New trigger names: `speak_down`, `break_over`, `volume_far` (`speak_up`, `speak_ok` and `break_due` were added by the team's Python detectors at the same time; their patterns and rules were kept).
 
 ## Tests
 ```
@@ -47,7 +47,13 @@ cd plugin/WorkHealthCoachPlugin/tests/Harness && ./run.sh       # 60 checks, thr
 ./bin/Release/net10.0/Harness --render <folder>                  # draws the Keypad screens to PNG
 dotnet build -c Release -p:LinkPlugin=false                      # compile in src/ without linking into Options+
 ```
-`WORKHEALTH_DATA_DIR` overrides the settings folder (the harness refuses to run without it).
+`WORKHEALTH_DATA_DIR` overrides the settings folder and `WORKHEALTH_PORT` the server port (default 8787). The harness uses its own port (18787) and refuses to run on 8787, so it can never touch the plugin running inside Options+.
+
+## Overlaps with the team's Python work (read this)
+- **Two Pomodoro timers.** `brain/.../pomodoro_monitor.py` (Gaze Tracker presence + focus) sends `break_due` every 2 s until you take a break. `PomodoroState` (plugin) is a separate clock with the Keypad timer and the page's settings. Run only one source of `break_due` at a time, or later let the Python monitor send only presence (`/signal/presence/true|false`) and let the plugin own the clock.
+- **Page switch = policy switch.** The Pomodoro feature is off on the page by default, which sets the `break_due`/`break_over` rules to disabled. Until Pomodoro is switched on (page or key), `break_due` from `pomodoro_monitor.py` is dropped ("disabled" in the log). Same idea for every feature: off on the page = its triggers are off.
+- **Pomodoro cooldown on the page defaults to 180 s** (the team's value for the repeating `break_due`), not "once per cycle", because the Python timer re-sends until the break is taken. The plugin's own timer fires once per phase either way.
+- **Cooldown defaults** on first page open follow the team table (pace 30 s, blink 20 min, behind 60 s, speak up 30 s) and replace the plugin's 90 s / 5 min / 20 s / 90 s.
 
 ## Not connected yet (next phase)
 1. **Devices:** `dotnet build -c Debug` in `src/` (links into Options+), drag the "Desk Coach" keys and "Coach screen" onto the Keypad, press them, test the four haptic patterns on the MX Master 4 from the page. Nothing here has run on real hardware yet.

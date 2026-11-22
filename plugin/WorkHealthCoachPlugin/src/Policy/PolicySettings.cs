@@ -72,10 +72,8 @@ namespace Loupedeck.WorkHealthCoachPlugin
             ["break_due"]        = new TriggerRule { MinSeverity = 0.5, CooldownSec = 180, HapticAfterSec = 5,  MaxPer10Min = 3 },
             ["person_behind"]    = new TriggerRule { MinSeverity = 0.5, CooldownSec = 20,  HapticAfterSec = 0,  MaxPer10Min = 6, Critical = true },
             ["test_blink"]       = new TriggerRule { MinSeverity = 0.0, CooldownSec = 0,   HapticAfterSec = 0,  MaxPer10Min = 999 },
-            // added with the settings page (team table 2026-11-21)
-            ["speak_up"]         = new TriggerRule { MinSeverity = 0.5, CooldownSec = 30,  HapticAfterSec = 0,  MaxPer10Min = 6 },
+            // added with the settings page (speak_up and break_due above are the team's; the page overrides their cooldown)
             ["speak_down"]       = new TriggerRule { MinSeverity = 0.5, CooldownSec = 30,  HapticAfterSec = 0,  MaxPer10Min = 6 },
-            ["break_due"]        = new TriggerRule { MinSeverity = 0.0, CooldownSec = 0,   HapticAfterSec = 0,  MaxPer10Min = 30 },
             ["break_over"]       = new TriggerRule { MinSeverity = 0.0, CooldownSec = 0,   HapticAfterSec = 0,  MaxPer10Min = 30 },
             ["volume_far"]       = new TriggerRule { MinSeverity = 0.0, CooldownSec = 0,   HapticAfterSec = 0,  MaxPer10Min = 999, Haptic = false, Visual = false, Overlay = false },
         };

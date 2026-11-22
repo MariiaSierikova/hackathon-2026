@@ -7,4 +7,4 @@ export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
 dotnet build -c Release -p:LinkPlugin=false 2>&1 | grep -E " error |Build succeeded|FAILED" || true
 FAKE_HOME="$(mktemp -d /tmp/workhealth-harness-XXXXXX)"
 trap 'rm -rf "$FAKE_HOME"' EXIT
-WORKHEALTH_DATA_DIR="$FAKE_HOME" ./bin/Release/net10.0/Harness
+WORKHEALTH_PORT=18787 WORKHEALTH_DATA_DIR="$FAKE_HOME" ./bin/Release/net10.0/Harness

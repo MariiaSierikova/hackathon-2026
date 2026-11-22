@@ -19,7 +19,8 @@ namespace Loupedeck.WorkHealthCoachPlugin
     // for some prefixes and fails silently for normal users; a loopback TcpListener works everywhere.
     public class LocalServer
     {
-        public const Int32 Port = 8787;
+        // 8787 for real use; WORKHEALTH_PORT lets tests run a second server without touching the plugin inside Options+.
+        public static readonly Int32 Port = Int32.TryParse(Environment.GetEnvironmentVariable("WORKHEALTH_PORT"), out var p) && p > 0 ? p : 8787;
 
         // When this plugin was built (stamped by MSBuild). Shown by /health and in the log, so a stale build is easy to
         // spot: on Windows a still-loaded DLL can make `dotnet build` leave the old plugin running.

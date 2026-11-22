@@ -56,10 +56,29 @@ if (args.Length >= 1 && args[0] == "--serve")
     var ticker = new System.Timers.Timer(1000) { AutoReset = true };
     ticker.Elapsed += (_, _) => { SessionState.Tick(); PomodoroState.Tick(); };
     ticker.Start();
-    Console.WriteLine($"serving http://127.0.0.1:8787/  (data in {tmp})");
+    Console.WriteLine($"serving http://127.0.0.1:{LocalServer.Port}/  (data in {tmp})");
     await Task.Delay(TimeSpan.FromSeconds(args.Length > 1 ? Int32.Parse(args[1]) : 600));
     srv.Stop();
     return 0;
+}
+
+// The real plugin (Options+) listens on 8787. The harness must never talk to it, so it needs its own port.
+if (LocalServer.Port == 8787)
+{
+    Console.WriteLine("ABORT: the harness would use port 8787, which belongs to the real plugin. Run tests/Harness/run.sh (sets WORKHEALTH_PORT). Nothing was touched.");
+    return 2;
+}
+
+try
+{
+    using var probe = new System.Net.Sockets.TcpClient();
+    await probe.ConnectAsync("127.0.0.1", LocalServer.Port).WaitAsync(TimeSpan.FromSeconds(1));
+    Console.WriteLine($"ABORT: something already listens on port {LocalServer.Port}. Nothing was touched.");
+    return 2;
+}
+catch (Exception ex) when (ex is not OperationCanceledException || true)
+{
+    // nothing listening: good
 }
 
 var pass = 0;
@@ -91,7 +110,7 @@ Console.WriteLine("Local server");
 var server = new LocalServer();
 server.Start();
 await Task.Delay(400);
-using var http = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:8787") };
+using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{LocalServer.Port}") };
 async Task<(Int32 code, String body, String type)> Send(String method, String path, String body = null)
 {
     var req = new HttpRequestMessage(new HttpMethod(method), path);
@@ -114,7 +133,7 @@ const String state = """
  "blink":{"enabled":true,"cooldown":1200,"ch":{"screen":true,"haptic":false,"keypad":true}},
  "behind":{"enabled":true,"cooldown":60,"ch":{"screen":true,"haptic":true,"keypad":true}},
  "volume":{"enabled":true,"cooldown":30,"ch":{"screen":true,"haptic":false,"keypad":true},"fb":{"keypad":{"mode":"color","color":"#3da5ff"}}},
- "pomodoro":{"enabled":false,"cooldown":0,"ch":{"screen":true,"haptic":true,"keypad":true},"params":{"work":1,"short":1,"long":1,"rounds":2,"auto":false,"cam":true,"reset":5}}}}
+ "pomodoro":{"enabled":false,"cooldown":180,"ch":{"screen":true,"haptic":true,"keypad":true},"params":{"work":1,"short":1,"long":1,"rounds":2,"auto":false,"cam":true,"reset":5}}}}
 """;
 var post = await Send("POST", "/ui-state", state);
 Check("POST /ui-state accepted", post.code == 200 && post.body.Contains("\"ok\":true"), post.body);
@@ -169,7 +188,7 @@ var bump2 = HapticPlayer.Resolve("pace_too_fast", "normal", "bump", 2);
 Check("bump x2 = two pulses, 300 ms gap", bump2.Length == 2 && bump2[0].Pulse == HapticPlayer.Bump && bump2[0].DelayAfterMs == 300 && bump2[1].DelayAfterMs == 0);
 Check("strong repeats the pattern", HapticPlayer.Resolve("x", "strong", "tap", 1).Length == 2);
 Check("off = silent", HapticPlayer.Resolve("pace_too_fast", "off", "jingle", 1).Length == 0);
-Check("no choice = built-in pattern", HapticPlayer.Resolve("break_due", "normal", null, 1)[0].Pulse == HapticPlayer.Done);
+Check("no choice = built-in pattern (team: break_due soft x3, speak_up crisp + soft)", HapticPlayer.Resolve("break_due", "normal", null, 1) is { Length: 3 } bd && bd[0].Pulse == HapticPlayer.Soft && HapticPlayer.Resolve("speak_up", "normal", null, 1)[0].Pulse == HapticPlayer.Sharp);
 Check("every trigger has a pattern", new[] { "speak_up", "speak_down", "break_due", "break_over", "volume_far" }.All(n => HapticPlayer.Resolve(n, "normal", null, 1) is { Length: > 0 }));
 Check("four choices", HapticPlayer.ChoiceNames.OrderBy(x => x).SequenceEqual(new[] { "alert", "bump", "jingle", "tap" }));
 

@@ -38,9 +38,8 @@ namespace Loupedeck.WorkHealthCoachPlugin
             ["break_due"]        = new[] { new Step(Soft, 300), new Step(Soft, 300), new Step(Soft, 0) },
             ["test_blink"]       = new[] { new Step(Soft, 0) },   // development only: one soft tap per detected blink
             ["person_behind"]    = new[] { new Step(Knock, 350), new Step(Knock, 0) },
-            ["speak_up"]         = new[] { new Step(Soft, 0) },
+            // speak_up and break_due come from the team (speak_up: crisp + soft tap, break_due: soft x3), see above
             ["speak_down"]       = new[] { new Step(Calm, 0) },
-            ["break_due"]        = new[] { new Step(Done, 300), new Step(Done, 0) },
             ["break_over"]       = new[] { new Step(Sharp, 0) },
             ["volume_far"]       = new[] { new Step(Soft, 0) },
         };
