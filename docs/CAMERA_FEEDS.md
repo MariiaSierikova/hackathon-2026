@@ -24,6 +24,17 @@ with a stable id, x position and size; the plugin decides (walk past = ignored, 
 - **OpenCV 4 is required** (`opencv-python>=4.8,<5` in `pyproject.toml`): OpenCV 5 removed `CascadeClassifier`. After pulling run `uv sync`.
 - Frontal faces only: someone seen from the side or from behind (hair only) is not detected.
 
+## Black picture / wrong camera
+`behind_monitor.py --scan` tries camera numbers 0-9 and prints size, brightness and grey/colour for each: the infrared camera is **grey, tall (portrait) and not black**. The monitor also
+warns `the picture is BLACK` and shows `brightness` in its status line. A black picture means a wrong number or an infrared stream that does not deliver (try with the Gaze Tracker running,
+unplug and replug the camera, close other programs that use the camera). The camera docs note the first ~20 infrared frames are an auto-exposure ramp.
+
+## Flicker and very dark pictures (seen on the real camera)
+The infrared light pulses: **lit and unlit frames alternate** (every other frame is black, brightness 0), and the lit ones are very dark (brightness ~30, but range 255 after stretching).
+`behind_monitor.py` therefore (1) uses, per pixel, the brighter of two consecutive frames (Logitech's `--flicker-filter`), (2) stretches the 1st-99th percentile to 0-255 (Logitech's `stretch` mode)
+before the face search and in the preview, (3) draws the preview on every frame. Verified with a fake camera that alternates lit / unlit frames; with the Gaze Tracker running the infrared
+stream is ~1 frame per second (the colour stream is open as MJPG), so the preview is slow by nature.
+
 ## Verified / not verified
 - Verified here (no camera): the detector finds a second face in a picture; the simulated visitor and the simulated far-away person reach the real plugin logic and produce
   one `person_behind` alert (mouse, Keypad, screen) and `ratio` 0.3 / back to 1.

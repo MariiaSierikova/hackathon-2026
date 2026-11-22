@@ -1,0 +1,105 @@
+From 60eba66feeb206de0ecac039ba573559e21238d5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 10:00:40 +0000
+Subject: [PATCH] behind_monitor: brighten the (very dark) infrared picture
+ like Logitech's example_IR stretch before the face search and in the preview;
+ judge 'black' by dynamic range
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ brain/src/brain/monitors/behind_monitor.py | 38 ++++++++++++++++------
+ 1 file changed, 28 insertions(+), 10 deletions(-)
+
+diff --git a/brain/src/brain/monitors/behind_monitor.py b/brain/src/brain/monitors/behind_monitor.py
+index 07c1d4f..a88ebac 100644
+--- a/brain/src/brain/monitors/behind_monitor.py
++++ b/brain/src/brain/monitors/behind_monitor.py
+@@ -46,10 +46,23 @@ def load_cascade():
+     return c
+ 
+ 
++def enhance(gray):
++    """The infrared picture can be VERY dark (brightness 0-3 of 255) while still holding a normal image. Like Logitech's example_IR.py 'stretch'
++    mode: map the 1st..99th percentile of the values to 0..255. Returns (brightened picture, dynamic range); range < 2 = no picture at all."""
++    import numpy as np
++    lo, hi = np.percentile(gray, (1, 99))
++    rng = float(hi - lo)
++    if rng < 1:
++        return gray.copy(), rng
++    out = (gray.astype(np.float32) - lo) * (255.0 / rng)
++    return np.clip(out, 0, 255).astype(np.uint8), rng
++
++
+ def detect(gray, cascade, min_face=24):
+-    """Boxes (x, y, w, h) of frontal faces in a grey picture. Histogram equalisation helps the dim infrared picture."""
++    """Boxes (x, y, w, h) of frontal faces in a grey picture (brightened first, see enhance)."""
+     import cv2
+-    g = cv2.equalizeHist(gray)
++    g, _ = enhance(gray)
++    g = cv2.equalizeHist(g)
+     boxes = cascade.detectMultiScale(g, scaleFactor=1.1, minNeighbors=5, minSize=(min_face, min_face))
+     return [tuple(int(v) for v in b) for b in boxes]
+ 
+@@ -103,12 +116,13 @@ def scan(a, say=print):
+                 say(f"  {idx}: opens ({info['width']}x{info['height']}) but delivers NO frames")
+                 continue
+             tail = means[-5:]
++            rng = float(enhance(cv2.cvtColor(last, cv2.COLOR_BGR2GRAY) if last.ndim == 3 else last)[1])
+             grey = bool(abs(last[..., 0].astype(int) - last[..., 1].astype(int)).mean() < 2) if last.ndim == 3 else True
+             tall = last.shape[0] > last.shape[1]
+             mean = sum(tail) / len(tail)
+-            verdict = ("BLACK picture" if mean < 8 else "looks like INFRARED (grey, tall): USE THIS ONE" if grey and tall
++            verdict = ("BLACK picture (no image)" if rng < 2 else "looks like INFRARED (grey, tall): USE THIS ONE" if grey and tall
+                        else "colour camera (the Gaze Tracker uses this)" if not grey else "grey but not tall")
+-            say(f"  {idx}: {last.shape[1]}x{last.shape[0]} {info['fourcc']} {len(means)} frames, brightness {mean:.0f}/255, {'grey' if grey else 'colour'}: {verdict}")
++            say(f"  {idx}: {last.shape[1]}x{last.shape[0]} {info['fourcc']} {len(means)} frames, brightness {mean:.0f}/255 range {rng:.0f}, {'grey' if grey else 'colour'}: {verdict}")
+         finally:
+             cap.release()
+     say("Use the number that says 'looks like INFRARED', e.g.  app.py --auto --mic N --ir-device THAT_NUMBER")
+@@ -182,7 +196,7 @@ def run(a, stop, say=print):
+     for _ in range(20):                      # the first ~20 frames are an auto-exposure ramp
+         cap.read()
+ 
+-    last, t_status, frames, found, black_said = 0.0, time.time(), 0, 0, False
++    last, t_status, frames, found, black_said, dim_said = 0.0, time.time(), 0, 0, False, False
+     try:
+         while not stop.is_set():
+             ok, frame = cap.read()
+@@ -196,16 +210,20 @@ def run(a, stop, say=print):
+             last = now
+             gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+             brightness = float(gray.mean())
+-            if brightness < 8 and frames > 10 and not black_said:
++            bright_img, rng = enhance(gray)
++            if rng < 2 and frames > 10 and not black_said:
+                 black_said = True
+-                say("WARNING: the picture is BLACK (brightness %.0f/255). Wrong camera number, or the infrared stream is not delivering. "
+-                    "Run:  behind_monitor.py --scan   to find the right number." % brightness)
++                say("WARNING: the picture is BLACK (no image at all, range %.1f). Wrong camera number, or the infrared stream is not delivering. "
++                    "Run:  behind_monitor.py --scan   to find the right number." % rng)
++            elif brightness < 8 and rng >= 2 and not dim_said:
++                dim_said = True
++                say(f"note: the infrared picture is very dark (brightness {brightness:.0f}/255) but has an image (range {rng:.0f}); it is brightened before the search.")
+             boxes = detect(gray, cascade, a.min_face)
+             faces = to_faces(boxes, gray.shape[1])
+             user, tracked = handle(faces, now)
+             found += len(boxes)
+             if a.preview:
+-                shown = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
++                shown = cv2.cvtColor(bright_img, cv2.COLOR_GRAY2BGR)
+                 ordered = sorted(boxes, key=lambda b: b[2], reverse=True)
+                 for k, (x, y, w, h) in enumerate(ordered):
+                     cv2.rectangle(shown, (x, y), (x + w, y + h), (0, 200, 0) if k == 0 else (0, 0, 255), 2)
+@@ -215,7 +233,7 @@ def run(a, stop, say=print):
+             if now - t_status >= 5:
+                 t_status = now
+                 say(f"[{now - t0:4.0f}s] faces now: {len(boxes)} ({'you + ' + str(len(tracked)) + ' other' if user and tracked else 'you only' if user else 'nobody'}) "
+-                    f"| frames {frames} | brightness {brightness:.0f} | plugin: {coach.sent} ok / {coach.failed} failed"
++                    f"| frames {frames} | brightness {brightness:.0f} range {rng:.0f} | plugin: {coach.sent} ok / {coach.failed} failed"
+                     + (f" | other: x={tracked[0][1].x:.2f} size={tracked[0][1].size:.3f}" if tracked else ""))
+     finally:
+         cap.release()
+-- 
+2.43.0
+
