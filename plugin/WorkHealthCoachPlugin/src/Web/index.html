@@ -468,28 +468,64 @@ const DEMO_FULL=[
   say:"Local, quiet, and built on your devices. We would love: brightness from the camera, a second person seen by the camera, a settings panel inside Options+, haptic length, and opening the ring from a plugin. Thank you.",
   todo:["Leave this page up for questions."],btns:[]},
 ];
-const DEMO_PITCH=[
- {t:0,len:15,title:"Hook",
-  say:"We all work with headphones on. We stop blinking, skip breaks, and cannot hear someone walking up behind us. Desk Coach is a quiet coach that runs on your own computer and talks to you through the Logitech devices you already use.",
+const DEMO_JURY=[
+ {t:0,len:25,title:"Hook",
+  say:"We all work with headphones on. We stop blinking, skip breaks, and cannot hear someone walking up behind us. Desk Coach is a quiet coach that looks after that, through the Logitech devices you already use.",
   todo:["Headphones on, music playing."],btns:[]},
- {t:15,len:18,title:"The live moment",
-  say:"Walking past: nothing. Coming to me: my MX Master 4 buzzes and my keypad flashes.",
+ {t:25,len:15,title:"Local, built in C#",
+  say:"Everything runs on this laptop. No video and no audio leave it. The brain of the app is a C# plugin inside Logi Options+.",
+  todo:["Say it plainly. The detectors are small Python programs that only send events to the C# backend: be ready to say so."],btns:[["go-dash","Open the dashboard"]]},
+ {t:40,len:60,title:"The live moment: person behind",
+  say:"Watch behind me. Someone walks past: nothing, we ignore that. Now someone walks up to my desk: my mouse buzzes and my keypad flashes. I would never have heard them.",
   todo:["A colleague walks past behind you: nothing happens.","The colleague walks up to your chair: the mouse buzzes and the keypad flashes red."],
   btns:[["behind_pass","Fallback: someone walks past"],["behind_come","Fallback: someone comes to my desk"]]},
- {t:33,len:7,title:"The mouse ring",
-  say:"And from the mouse ring I lower the music.",
+ {t:100,len:20,title:"The mouse ring",
+  say:"From the mouse ring I choose what to do: lower the music so I can talk, hide my screen, or say it is fine.",
   todo:["Open the mouse ring and press Talk mode. Press it again afterwards to restore the volume."],
   btns:[["ring_talk","Ring: Talk mode"],["ring_ok","Ring: It is fine"]]},
- {t:40,len:12,title:"Everything else",
-  say:"The same engine watches my pace, my voice, my blinking, my breaks and my distance from the screen. Every feature has a switch on the keypad, and nothing leaves this laptop.",
-  todo:["Point at the keypad while you say it."],btns:[["go-dash","Open the dashboard"]]},
- {t:52,len:8,title:"Brightness and thank you",
-  say:"One feature needs Logitech: screen brightness. The camera must report ambient light, a hardware switch we would love. Thank you.",
+ {t:120,len:30,title:"You stay in control",
+  say:"It never nags. Every feature has a switch, on the keypad and on this page. I press a key and it turns off here too. When I present, one switch makes it silent for the audience.",
+  todo:["Press a keypad key: that widget goes grey and the switch on the page turns off.","Mention the Presenting key."],btns:[["go-dash","Open the dashboard"]]},
+ {t:150,len:18,title:"The rest, in one sentence",
+  say:"The same engine also watches my speaking pace and volume, my blinking, my breaks, and my distance from the screen.",
+  todo:["Point at the keypad. Only if you have a few spare seconds, press one fallback."],
+  btns:[["pace","Snail (too fast)"],["blink","Owl (blink)"],["breakdue","Break reminder"]]},
+ {t:168,len:12,title:"Brightness and thank you",
+  say:"One feature needs Logitech: screen brightness. The camera has to report ambient light. That is a hardware switch we would love. Thank you.",
   todo:["Optional: show the locked brightness card."],btns:[["go-brightness","Open the brightness concept"]]},
+ {t:180,len:60,title:"Questions (1 minute)",
+  say:"Happy to take questions.",
+  todo:["Is it annoying? One policy for everything: cooldowns, a budget, snooze, a silent Presenting mode and one key that switches all alerts off.","Privacy? Everything runs on this computer. Nothing is recorded or uploaded.","How accurate is it? A prototype with reasoned defaults, and the settings are adjustable.","What next? Brightness from the camera, and a second person detected on the camera itself."],btns:[]},
 ];
-const demo={mode:"full",run:false,at:0,t0:0,timer:null,farTimer:null,lastK:-1};
-function DEM(){ return demo.mode==="pitch"?DEMO_PITCH:DEMO_FULL; }
-function demoTotal(){ return demo.mode==="pitch"?60:600; }
+const DEMO_TECH=[
+ {t:0,len:15,title:"Hook",
+  say:"People wear headphones, stare at screens and skip breaks. We built a coach on your own stack: the LogiInsight camera, MX Master 4, MX Keypad and the Actions Ring.",
+  todo:["Headphones on."],btns:[]},
+ {t:15,len:35,title:"The architecture",
+  say:"Everything runs locally. The backend is a C# plugin on the Logi Actions SDK, .NET 10, running inside Logi Plugin Service. It listens on localhost, port 8787. Small Python detectors feed it events: the LogiInsight face mesh, the Gaze Tracker, an infrared second-face detector and the microphone. The plugin owns every rule and every output.",
+  todo:["Show the dashboard or one architecture slide.","Python only detects and sends events: say it before someone asks."],btns:[["go-dash","Open the dashboard"]]},
+ {t:50,len:55,title:"The live moment: person behind",
+  say:"Person behind. The infrared stream gives us faces with a position and a size, and the plugin follows each one. Sideways speed, measured in face widths per second, separates walking past from coming to me. Walk past: ignored. Walk up: alert.",
+  todo:["A colleague walks past behind you: nothing happens.","The colleague walks up: the mouse buzzes and the keypad flashes red."],
+  btns:[["behind_pass","Fallback: someone walks past"],["behind_come","Fallback: someone comes to my desk"]]},
+ {t:105,len:30,title:"The devices",
+  say:"The alert goes through one policy: severity, cooldown, a budget, escalation. Then three outputs: haptic events mapped to MX Master 4 waveforms, one picture across all nine keypad keys as widgets, and Actions Ring commands I can press without the keyboard.",
+  todo:["Open the mouse ring and press Talk mode (press again to restore the volume)."],
+  btns:[["ring_talk","Ring: Talk mode"],["ring_ok","Ring: It is fine"]]},
+ {t:135,len:20,title:"Settings and control",
+  say:"The settings are a page the plugin serves from its own DLL. Keys and page stay in sync in both directions.",
+  todo:["Press a keypad key: the widget goes grey and the page switch turns off. Flip a switch on the page: the key changes."],btns:[["go-dash","Open the dashboard"]]},
+ {t:155,len:25,title:"Brightness and our wishlist",
+  say:"Brightness stays a concept: the camera does not report ambient light, so it has to be enabled in the hardware. Our wishlist: ambient light and a second person from the camera, haptic duration and strength, a settings panel for plugins in Options+, and opening the Ring or a folder from a plugin.",
+  todo:["Optional: show the locked brightness card."],btns:[["go-brightness","Open the brightness concept"]]},
+ {t:180,len:60,title:"Questions (1 minute)",
+  say:"Happy to take questions.",
+  todo:["Why Python for the detectors? The LogiInsight SDK and the Gaze Tracker are Python and WebSocket. Only events cross to the C# backend, so detection and rules stay separate.","Latency? Not measured. Rules run per event, and the Keypad redraw is limited to about ten per second.","Platforms? The plugin runs on both. The face AI needs Windows (macOS shows only the infrared stream). The Windows volume code is untested.","Limits? One face from the camera AI, the infrared second-face detector works at about 1 to 1.5 m, the camera AI overheats after about 10 minutes, haptics have no duration."],btns:[]},
+];
+const DEMO_SUB={jury:"3 minutes for the jury, then 1 minute of questions.",tech:"3 minutes for the Logitech team (technical), then 1 minute of questions.",full:"Ten minutes, in this order."};
+const demo={mode:"jury",run:false,at:0,t0:0,timer:null,farTimer:null,lastK:-1};
+function DEM(){ return demo.mode==="tech"?DEMO_TECH:demo.mode==="full"?DEMO_FULL:DEMO_JURY; }
+function demoTotal(){ return demo.mode==="full"?600:240; }
 const fmtClock=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(Math.floor(s%60)).padStart(2,"0");
 function demoIndex(){ let k=0; DEM().forEach((s,i)=>{ if(demoElapsed()>=s.t) k=i; }); return k; }
 function demoElapsed(){ return demo.run?demo.at+(Date.now()-demo.t0)/1000:demo.at; }
@@ -504,8 +540,8 @@ function demoPaint(){
 }
 function renderDemo(){
   const dis=remote?"":" disabled";
-  $("#main").innerHTML='<div class="top"><div class="grow"><h1>Demo</h1><p class="sub" style="margin:0">'+(demo.mode==="pitch"?"One minute for the jury: one live moment, the rest in one sentence.":"Ten minutes, in this order.")+" Keep this page on a second screen."+'</p></div></div>'+
-   '<div class="sec"><div class="sh"><div><div class="dclock" id="dclock">00:00 / '+fmtClock(demoTotal())+'</div><div class="fname" id="dleft"></div></div><div class="inline" style="margin:0"><button class="btn pri" data-act="demo-start" id="dstart">Start</button><button class="btn" data-act="demo-reset">Reset</button><div class="seg"><button class="'+(demo.mode==="full"?"on":"")+'" data-act="demo-mode" data-m="full">10 min</button><button class="'+(demo.mode==="pitch"?"on":"")+'" data-act="demo-mode" data-m="pitch">1 min jury</button></div></div></div><div class="dtrack"><div id="dbar"></div></div></div>'+
+  $("#main").innerHTML='<div class="top"><div class="grow"><h1>Demo</h1><p class="sub" style="margin:0">'+DEMO_SUB[demo.mode]+" Keep this page on a second screen."+'</p></div></div>'+
+   '<div class="sec"><div class="sh"><div><div class="dclock" id="dclock">00:00 / '+fmtClock(demoTotal())+'</div><div class="fname" id="dleft"></div></div><div class="inline" style="margin:0"><button class="btn pri" data-act="demo-start" id="dstart">Start</button><button class="btn" data-act="demo-reset">Reset</button><div class="seg">'+[["jury","3 min jury"],["tech","3 min Logitech"],["full","10 min"]].map(m=>'<button class="'+(demo.mode===m[0]?"on":"")+'" data-act="demo-mode" data-m="'+m[0]+'">'+m[1]+"</button>").join("")+'</div></div></div><div class="dtrack"><div id="dbar"></div></div></div>'+
    '<div class="sec"><div class="sh"><h2>Before you start</h2><button class="btn sm" data-act="demo-check"'+dis+'>Check everything</button></div><p class="sd">'+(remote?"Press the button: it checks the plugin, the master switch, the alert light and your volume.":"Open this page from the plugin (http://127.0.0.1:8787/) to use the demo buttons.")+'</p><div class="fname" id="dcheck" style="white-space:pre-line"></div></div>'+
    DEM().map((s,i)=>'<div class="sec dseg"><div class="sh"><h2>'+fmtClock(s.t)+" · "+s.title+'</h2><button class="btn sm ghost" data-act="demo-jump" data-i="'+i+'">Go to this part</button></div>'+
      '<p class="dsay">“'+esc(s.say)+'”</p><ul class="dlist">'+s.todo.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>"+
@@ -887,7 +923,7 @@ document.addEventListener("click",e=>{
       if(k==="reset"){ P.phase="work"; P.round=1; P.run=false; P.left=S.features.pomodoro.params.work*60; pomoPaint(); }
       break; }
    case "demo-start": if(demo.run){ demo.at=demoElapsed(); demo.run=false; clearInterval(demo.timer); } else { demo.t0=Date.now(); demo.run=true; clearInterval(demo.timer); demo.timer=setInterval(demoPaint,500); } demoPaint(); break;
-   case "demo-mode": demo.mode=t.dataset.m==="pitch"?"pitch":"full"; demo.run=false; demo.at=0; demo.lastK=-1; clearInterval(demo.timer); renderDemo(); break;
+   case "demo-mode": demo.mode=["jury","tech","full"].includes(t.dataset.m)?t.dataset.m:"jury"; demo.run=false; demo.at=0; demo.lastK=-1; clearInterval(demo.timer); renderDemo(); break;
    case "demo-reset": demo.lastK=-1; demo.run=false; demo.at=0; clearInterval(demo.timer); demoPaint(); break;
    case "demo-jump": demo.lastK=-1; demo.at=DEM()[+t.dataset.i].t; demo.t0=Date.now(); if(!demo.run){ demo.run=true; clearInterval(demo.timer); demo.timer=setInterval(demoPaint,500); } demoPaint(); break;
    case "demo-do": if(t.dataset.d==="go-dash") location.hash="#/"; else if(t.dataset.d==="go-brightness") location.hash="#/f/brightness"; else demoDo(t.dataset.d); break;
