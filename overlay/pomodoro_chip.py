@@ -3,7 +3,7 @@ from PySide6 import QtCore, QtWidgets
 
 from overlay import exclude_from_capture
 
-COLORS = {"work": "#2e7d32", "paused": "#6b7280", "due": "#c62828"}
+COLORS = {"work": "#2e7d32", "paused": "#6b7280", "due": "#c62828", "break": "#1565c0"}
 
 
 class Chip(QtWidgets.QLabel):
@@ -24,7 +24,7 @@ class Chip(QtWidgets.QLabel):
             self.hide()
             return
         m, s = divmod(int(remaining), 60)
-        text = {"work": f"WORK  {m:02d}:{s:02d}", "paused": f"PAUSED  {m:02d}:{s:02d}", "due": "TAKE A BREAK"}[state]
+        text = {"work": f"WORK  {m:02d}:{s:02d}", "paused": f"PAUSED  {m:02d}:{s:02d}", "due": "TAKE A BREAK", "break": f"BREAK  {m:02d}:{s:02d}"}[state]
         self.setText(text)
         self.setStyleSheet(f"background:{COLORS[state]}; color:white; font:bold 16px Consolas,Menlo,monospace;"
                            "border-radius:10px; padding:6px 14px;")

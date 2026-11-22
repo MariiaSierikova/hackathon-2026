@@ -49,11 +49,19 @@ dotnet build -c Release -p:LinkPlugin=false                      # compile in sr
 ```
 `WORKHEALTH_DATA_DIR` overrides the settings folder and `WORKHEALTH_PORT` the server port (default 8787). The harness uses its own port (18787) and refuses to run on 8787, so it can never touch the plugin running inside Options+.
 
-## Overlaps with the team's Python work (read this)
-- **Two Pomodoro timers.** `brain/.../pomodoro_monitor.py` (Gaze Tracker presence + focus) sends `break_due` every 2 s until you take a break. `PomodoroState` (plugin) is a separate clock with the Keypad timer and the page's settings. Run only one source of `break_due` at a time, or later let the Python monitor send only presence (`/signal/presence/true|false`) and let the plugin own the clock.
-- **Page switch = policy switch.** The Pomodoro feature is off on the page by default, which sets the `break_due`/`break_over` rules to disabled. Until Pomodoro is switched on (page or key), `break_due` from `pomodoro_monitor.py` is dropped ("disabled" in the log). Same idea for every feature: off on the page = its triggers are off.
-- **Pomodoro cooldown on the page defaults to 180 s** (the team's value for the repeating `break_due`), not "once per cycle", because the Python timer re-sends until the break is taken. The plugin's own timer fires once per phase either way.
+## How the Python detectors fit (integration, 2026-11-22)
+- **One Pomodoro clock: the plugin's.** `pomodoro_monitor.py` now only sends presence (`/signal/presence/true|false`); `--own-timer` is the old
+  standalone mode (do not combine). See `docs/POMODORO.md`.
+- **Page switch = policy switch.** Pomodoro is OFF on the page by default: the clock does not run and `break_due` is dropped ("disabled" in the log) until
+  the user switches it on (page or Keypad key). Same idea for every feature: off on the page = its triggers are off.
+- **Mouse on the first `break_due`.** The plugin timer sends `break_due` once per phase, so `HapticAfterSec` for `break_due` / `break_over` is 0 (also forced in `UiSettings.Apply`,
+  because an existing `settings.json` may still carry the old 5 s escalation).
+- **Duck / snail / owl** are driven by `speak_up` / `pace_too_fast` / `blink_low` through the page's "screen" channel; `speak_ok`, `pace_ok`, `blink_detected` end them.
+  The **Presenting** profile mutes the screen channel, so the animals do not show in that profile (harness check "presenting mutes the on-screen channel").
+- **Thresholds on the page are not read by the Python detectors yet** (speed wpm, volume dB, blink rate, "second face for N s"). Only the plugin side is applied
+  (on/off, cooldown, channels, haptic pattern, Pomodoro timings). The detectors keep their own defaults (`--fast-rate`, `--quiet-db`, `--no-blink-after`).
 - **Cooldown defaults** on first page open follow the team table (pace 30 s, blink 20 min, behind 60 s, speak up 30 s) and replace the plugin's 90 s / 5 min / 20 s / 90 s.
+  Blink: 20 min cooldown and no mouse buzz by default, so a demo of the blink reminder needs `--force` or a lower cooldown / the haptic channel switched on.
 
 ## Not connected yet (next phase)
 1. **Devices:** `dotnet build -c Debug` in `src/` (links into Options+), drag the "Desk Coach" keys and "Coach screen" onto the Keypad, press them, test the four haptic patterns on the MX Master 4 from the page. Nothing here has run on real hardware yet.

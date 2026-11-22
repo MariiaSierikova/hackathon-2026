@@ -14,6 +14,7 @@ Design rules (so a per-frame loop can call it safely):
 - if the plugin is slow, old messages are dropped so a fresh "blink_detected" never waits behind a pile of old ones
 """
 import json
+import os
 import queue
 import threading
 import time
@@ -34,7 +35,9 @@ PACE_OK = "pace_ok"                 # control: pace is fine again -> ends the pa
 
 
 class CoachClient:
-    def __init__(self, base="http://127.0.0.1:8787", min_repeat_s=2.0, timeout_s=1.0):
+    def __init__(self, base=None, min_repeat_s=2.0, timeout_s=1.0):
+        # WORKHEALTH_PORT is the same switch the plugin has (tests run a second server); default 8787
+        base = base or f"http://127.0.0.1:{os.environ.get('WORKHEALTH_PORT', '8787')}"
         self.base, self.min_repeat_s, self.timeout_s = base, min_repeat_s, timeout_s
         self._last = {}
         self._q = queue.Queue(maxsize=20)
@@ -76,6 +79,15 @@ class CoachClient:
 
     def wpm(self, words_per_minute):
         return self._put("/metrics", {"wpm": float(words_per_minute)})
+
+    def get_json(self, path, timeout_s=0.4):
+        """GET a JSON answer from the plugin (blocking, short timeout). None if the plugin does not answer."""
+        try:
+            with urllib.request.urlopen(self.base + path, timeout=timeout_s) as r:
+                return json.loads(r.read())
+        except Exception as e:
+            self.last_error = e
+            return None
 
     def health(self):
         """True if the plugin answers (blocking, <= timeout). The answer also names the plugin build."""
