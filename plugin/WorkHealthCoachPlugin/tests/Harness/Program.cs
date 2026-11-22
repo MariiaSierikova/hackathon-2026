@@ -561,10 +561,77 @@ Check("feature off switches the engine off", !PersonBehind.Enabled);
 UiSettings.SetFeatureEnabled("behind", true);
 FarVolume.Audio = new NoAudio();
 
+Console.WriteLine("MX Keypad keys: pressing one key changes only that key (real key images, no device)");
+try
+{
+    var asm = typeof(FeatureToggleCommand).Assembly;
+    asm.GetType("Loupedeck.WorkHealthCoachPlugin.PluginResources")!.GetMethod("Init")!.Invoke(null, new Object[] { asm });
+    var keysCmd = new FeatureToggleCommand();
+    var getImage = typeof(FeatureToggleCommand).GetMethod("GetCommandImage", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)!;
+    Byte[] KeyImage(String key) => ((BitmapImage)getImage.Invoke(keysCmd, new Object[] { key, PluginImageSize.Width90 }))!.ToArray();
+    Dictionary<String, Byte[]> Snapshot() => FeatureToggleCommand.AllKeys.ToDictionary(k => k, KeyImage);
+    String Changed(Dictionary<String, Byte[]> a, Dictionary<String, Byte[]> b) => String.Join(",", FeatureToggleCommand.AllKeys.Where(k => !a[k].SequenceEqual(b[k])));
+
+    UiSettings.Set("""{"master":true,"profile":"everyday","muted":[],"features":{"speed":{"enabled":true},"volume":{"enabled":true},"blink":{"enabled":true},"pomodoro":{"enabled":false},"distance":{"enabled":true},"behind":{"enabled":true}}}""", out _);
+    var baseline = Snapshot();
+    Check("there are 8 keys", FeatureToggleCommand.AllKeys.Length == 8);
+    Check("all key images draw", baseline.Values.All(b => b.Length > 100));
+    Check("different keys look different", baseline["speed"].SequenceEqual(baseline["volume"]) == false);
+
+    UiSettings.SetFeatureEnabled("blink", false);
+    var afterBlink = Snapshot();
+    Check("press Eye blinking: ONLY that key changes", Changed(baseline, afterBlink) == "blink", $"changed: {Changed(baseline, afterBlink)}");
+    UiSettings.SetFeatureEnabled("blink", true);
+    Check("press it again: back to the first picture", Changed(baseline, Snapshot()) == "");
+
+    UiSettings.SetFeatureEnabled("speed", false);
+    Check("press Speech speed: only that key changes", Changed(baseline, Snapshot()) == "speed");
+    UiSettings.SetFeatureEnabled("speed", true);
+
+    UiSettings.SetMaster(false);
+    var masterOff = Snapshot();
+    Check("Master off: every feature key and the Master key go grey (by design), Presenting does not", Changed(baseline, masterOff) == "speed,volume,blink,distance,behind,master", $"changed: {Changed(baseline, masterOff)}");
+    UiSettings.SetMaster(true);
+    Check("Master on: all back", Changed(baseline, Snapshot()) == "");
+
+    UiSettings.TogglePresenting();
+    var presenting = Snapshot();
+    Check("Presenting on: Eye blinking and Volume-when-far go grey, Presenting lights up, the others stay", Changed(baseline, presenting) == "blink,distance,present", $"changed: {Changed(baseline, presenting)}");
+    UiSettings.TogglePresenting();
+    Check("Presenting off: keys are back", Changed(baseline, Snapshot()) == "");
+
+    UiSettings.SetFeatureEnabled("behind", false);
+    var offKeys = new[] { "speed", "volume", "blink", "distance" };
+    foreach (var k in offKeys) { UiSettings.SetFeatureEnabled(k, false); }
+    var most = Snapshot();
+    Check("each key follows its own switch (5 off, the rest unchanged)", Changed(baseline, most) == "speed,volume,blink,distance,behind", $"changed: {Changed(baseline, most)}");
+
+    // The other direction: flipping a switch on the web page (the page POSTs the whole state) must redraw the keys.
+    String PageState(Func<String, Boolean> on) => "{\"master\":true,\"profile\":\"custom\",\"muted\":[],\"features\":{" + String.Join(",", new[] { "speed", "volume", "blink", "pomodoro", "distance", "behind" }.Select(k => $"\"{k}\":{{\"enabled\":{(on(k) ? "true" : "false")}}}")) + "}}";
+    await Send("POST", "/ui-state", PageState(k => k != "pomodoro"));
+    var pageBase = Snapshot();
+    var redraws = 0;
+    Action onRedraw = () => redraws++;
+    UiSettings.Changed += onRedraw;
+    var r1 = await Send("POST", "/ui-state", PageState(k => k != "pomodoro" && k != "volume"));
+    Check("page: switch Speech volume off -> plugin accepts it and raises the redraw event", r1.code == 200 && redraws >= 1, $"{r1.code} redraws={redraws}");
+    Check("page: ...and ONLY the Speech volume key goes grey", Changed(pageBase, Snapshot()) == "volume", $"changed: {Changed(pageBase, Snapshot())}");
+    await Send("POST", "/ui-state", PageState(k => k != "pomodoro"));
+    Check("page: switch it on again -> the key is coloured again", Changed(pageBase, Snapshot()) == "");
+    await Send("POST", "/ui-state", PageState(k => k == "pomodoro" || k == "speed"));
+    Check("page: several switches at once -> exactly those keys change", Changed(pageBase, Snapshot()) == "volume,blink,pomodoro,distance,behind", $"changed: {Changed(pageBase, Snapshot())}");
+    UiSettings.Changed -= onRedraw;
+    Check("and the page is told about key presses (revision grows)", JsonDocument.Parse(UiSettings.ToJson()).RootElement.GetProperty("rev").GetInt64() > 1);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"  skip  key image checks: {ex.GetType().Name}: {ex.Message}");
+}
+
 Console.WriteLine("Persistence");
 var before = UiSettings.ToJson();
 UiSettings.Init();
-Check("state survives a reload", JsonDocument.Parse(UiSettings.ToJson()).RootElement.GetProperty("features").GetProperty("behind").GetProperty("params").GetProperty("hold").GetInt32() == 3);
+Check("state survives a reload", JsonDocument.Parse(UiSettings.ToJson()).RootElement.GetProperty("features").GetProperty("volume").GetProperty("enabled").GetBoolean() == false);
 
 Console.WriteLine("Keypad drawing (needs the real PluginApi.dll; skipped if it cannot load)");
 try

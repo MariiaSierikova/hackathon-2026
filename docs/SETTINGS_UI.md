@@ -31,6 +31,8 @@ The page offers four patterns per feature. Events and waveforms (`package/events
 ## MX Keypad
 - **Feature keys:** Options+ -> All Actions -> search "Desk Coach": one action per feature, plus Master switch and Presenting mode (`Actions/FeatureToggleCommand.cs`). Pixel icon on, dimmed off (icons in `Resources/feat_*.png`, from `scripts`-style 16x16 art). The Pomodoro key shows the live countdown wherever it sits.
 - Keys change the same document as the page, so page, keys and policy stay in sync (the page polls every 2 s).
+  Each key is redrawn **by name** (`ActionImageChanged(key)`: the Logitech docs say the no-argument call is for actions without parameters), so a press or a page switch changes only that key. The Pomodoro key alone is redrawn every second for the countdown. Master off greys every feature key on purpose (everything is paused); Presenting greys the features that profile switches off.
+  Debugging: every key press (`Desk Coach key pressed: 'speed'`) and every image request (`Desk Coach key image: 'speed' ON 80px`, verbose) is in the plugin log.
 - **New reminders** take over the whole Keypad like the eye and snail do: SPEAK UP, LOWER VOICE, BREAK TIME (green), BACK TO FOCUS, VOLUME UP. Colour comes from the page's Keypad colour (image upload is stored but not drawn yet).
 - **Pomodoro timer** in the Coach screen folder (same layout as the idle screen): top = FOCUS 1 OF 4 + AT DESK / AWAY / PAUSED / REST, middle = huge MM:SS, bottom = reset / play-pause / skip. Limit from the handoff: a folder cannot be opened by code, so the user presses the Coach screen key once; the Pomodoro feature key shows the countdown without opening anything.
 

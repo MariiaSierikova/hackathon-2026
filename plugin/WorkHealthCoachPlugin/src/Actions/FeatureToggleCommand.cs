@@ -32,24 +32,39 @@ namespace Loupedeck.WorkHealthCoachPlugin
             this.AddParameter("present", "Presenting mode (silent)", Group);
         }
 
+        // Every key of this command is a "variation" (a parameter). The Logitech docs say ActionImageChanged() without a
+        // parameter is for actions that have none; with parameters, say WHICH variation changed.
+        public static readonly String[] AllKeys = { "speed", "volume", "blink", "pomodoro", "distance", "behind", "master", "present" };
+
         protected override Boolean OnLoad()
         {
-            UiSettings.Changed += this.Redraw;
-            PomodoroState.Changed += this.Redraw;
+            UiSettings.Changed += this.RedrawAll;
+            PomodoroState.Changed += this.RedrawPomodoro;
             return true;
         }
 
         protected override Boolean OnUnload()
         {
-            UiSettings.Changed -= this.Redraw;
-            PomodoroState.Changed -= this.Redraw;
+            UiSettings.Changed -= this.RedrawAll;
+            PomodoroState.Changed -= this.RedrawPomodoro;
             return true;
         }
 
-        private void Redraw() => this.ActionImageChanged();
+        // A switch changed (page, key, profile, master): every key may look different, so refresh each one by name.
+        private void RedrawAll()
+        {
+            foreach (var key in AllKeys)
+            {
+                this.ActionImageChanged(key);
+            }
+        }
+
+        // The countdown only shows on the Pomodoro key, so only that key is redrawn every second.
+        private void RedrawPomodoro() => this.ActionImageChanged("pomodoro");
 
         protected override void RunCommand(String actionParameter)
         {
+            PluginLog.Info($"Desk Coach key pressed: '{actionParameter}'");
             switch (actionParameter)
             {
                 case "master":
@@ -66,6 +81,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
         private static Boolean IsOn(String id) => id switch
         {
+            null => false,
             "master" => UiSettings.Master,
             "present" => UiSettings.Profile == "presenting",
             _ => UiSettings.Master && UiSettings.FeatureEnabled(id),
@@ -77,8 +93,15 @@ namespace Loupedeck.WorkHealthCoachPlugin
         {
             try
             {
+                if (String.IsNullOrEmpty(actionParameter))
+                {
+                    PluginLog.Warning("Desk Coach key image requested without a key name (ignored)");
+                    return null;
+                }
+
                 var px = Render.Px(imageSize);
                 var on = IsOn(actionParameter);
+                PluginLog.Verbose($"Desk Coach key image: '{actionParameter}' {(on ? "ON" : "off")} {px}px");
                 var icon = PluginResources.ReadImage($"feat_{actionParameter}{(on ? String.Empty : "_off")}.png");
                 using var b = new BitmapBuilder(px, px);
                 b.Clear(new BitmapColor(18, 22, 30));
