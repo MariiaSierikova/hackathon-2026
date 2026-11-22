@@ -3,6 +3,8 @@
 **One sentence:** Desk Coach is a quiet work-health coach. The camera and microphone notice what you cannot (you stopped blinking, you skipped a break, someone is standing behind your headphones),
 and one Logi Options+ plugin decides whether it is worth bothering you, then tells you through the devices you already touch: MX Master 4 buzz, MX Keypad, Actions Ring, screen. Everything runs locally.
 
+**Only one minute?** `docs/PITCH_1MIN.md` (one live moment, the rest in a sentence). The Demo page has a **1 min jury** button for it.
+
 **Short version to read aloud:** `docs/DEMO_SCRIPT.md` (one page). The rest of this file is the detail behind it.
 
 **Presenter view:** open `http://127.0.0.1:8787/#/demo` (works offline, served by the plugin). It has the 10-minute clock, the current part highlighted, the lines to say, and a one-click fallback for every scene.

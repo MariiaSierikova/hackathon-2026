@@ -431,7 +431,7 @@ async function pollFar(){
 }
 /* ---- Demo: a 10-minute presenter view. Works offline (served by the plugin). Every scene has a one-click fallback
    so a missing camera or a noisy room never stops the talk. ---- */
-const DEMO=[
+const DEMO_FULL=[
  {t:0,len:45,title:"The problem",
   say:"I work with headphones on. I forget to blink, I skip breaks, and nobody can warn me when someone walks up behind me. Desk Coach notices, on this computer only, and taps me through the devices I already use.",
   todo:["Headphones on, music playing, stand or sit at the desk."],btns:[]},
@@ -468,26 +468,46 @@ const DEMO=[
   say:"Local, quiet, and built on your devices. We would love: brightness from the camera, a second person seen by the camera, a settings panel inside Options+, haptic length, and opening the ring from a plugin. Thank you.",
   todo:["Leave this page up for questions."],btns:[]},
 ];
-const DEMO_TOTAL=600;
-const demo={run:false,at:0,t0:0,timer:null,farTimer:null,lastK:-1};
+const DEMO_PITCH=[
+ {t:0,len:15,title:"Hook",
+  say:"We all work with headphones on. We stop blinking, skip breaks, and cannot hear someone walking up behind us. Desk Coach is a quiet coach that runs on your own computer and talks to you through the Logitech devices you already use.",
+  todo:["Headphones on, music playing."],btns:[]},
+ {t:15,len:18,title:"The live moment",
+  say:"Walking past: nothing. Coming to me: my MX Master 4 buzzes and my keypad flashes.",
+  todo:["A colleague walks past behind you: nothing happens.","The colleague walks up to your chair: the mouse buzzes and the keypad flashes red."],
+  btns:[["behind_pass","Fallback: someone walks past"],["behind_come","Fallback: someone comes to my desk"]]},
+ {t:33,len:7,title:"The mouse ring",
+  say:"And from the mouse ring I lower the music.",
+  todo:["Open the mouse ring and press Talk mode. Press it again afterwards to restore the volume."],
+  btns:[["ring_talk","Ring: Talk mode"],["ring_ok","Ring: It is fine"]]},
+ {t:40,len:12,title:"Everything else",
+  say:"The same engine watches my pace, my voice, my blinking, my breaks and my distance from the screen. Every feature has a switch on the keypad, and nothing leaves this laptop.",
+  todo:["Point at the keypad while you say it."],btns:[["go-dash","Open the dashboard"]]},
+ {t:52,len:8,title:"Brightness and thank you",
+  say:"One feature needs Logitech: screen brightness. The camera must report ambient light, a hardware switch we would love. Thank you.",
+  todo:["Optional: show the locked brightness card."],btns:[["go-brightness","Open the brightness concept"]]},
+];
+const demo={mode:"full",run:false,at:0,t0:0,timer:null,farTimer:null,lastK:-1};
+function DEM(){ return demo.mode==="pitch"?DEMO_PITCH:DEMO_FULL; }
+function demoTotal(){ return demo.mode==="pitch"?60:600; }
 const fmtClock=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(Math.floor(s%60)).padStart(2,"0");
-function demoIndex(){ let k=0; DEMO.forEach((s,i)=>{ if(demoElapsed()>=s.t) k=i; }); return k; }
+function demoIndex(){ let k=0; DEM().forEach((s,i)=>{ if(demoElapsed()>=s.t) k=i; }); return k; }
 function demoElapsed(){ return demo.run?demo.at+(Date.now()-demo.t0)/1000:demo.at; }
 function demoPaint(){
   const el=demoElapsed(), k=demoIndex(), c=$("#dclock"); if(!c) return;
-  c.textContent=fmtClock(Math.min(el,DEMO_TOTAL))+" / 10:00"; c.classList.toggle("over",el>DEMO_TOTAL);
-  const bar=$("#dbar"); if(bar) bar.style.width=Math.min(100,el/DEMO_TOTAL*100)+"%";
-  const seg=DEMO[k], left=Math.max(0,Math.ceil(seg.t+seg.len-el)); const n=$("#dleft"); if(n) n.textContent=el>0?"Part "+(k+1)+" of "+DEMO.length+": "+left+" s left in this part":"Press Start when you begin";
+  c.textContent=fmtClock(Math.min(el,demoTotal()))+" / "+fmtClock(demoTotal()); c.classList.toggle("over",el>demoTotal());
+  const bar=$("#dbar"); if(bar) bar.style.width=Math.min(100,el/demoTotal()*100)+"%";
+  const seg=DEM()[k], left=Math.max(0,Math.ceil(seg.t+seg.len-el)); const n=$("#dleft"); if(n) n.textContent=el>0?"Part "+(k+1)+" of "+DEM().length+": "+left+" s left in this part":"Press Start when you begin";
   document.querySelectorAll(".dseg").forEach((d,i)=>{ d.classList.toggle("cur",el>0&&i===k); d.classList.toggle("done",el>0&&i<k); });
   const b=$("#dstart"); if(b) b.textContent=demo.run?"Pause":(el>0?"Resume":"Start");
   if(demo.run&&k!==demo.lastK){ demo.lastK=k; const cur=document.querySelector(".dseg.cur"); if(cur&&cur.scrollIntoView) cur.scrollIntoView({behavior:"smooth",block:"start"}); }
 }
 function renderDemo(){
   const dis=remote?"":" disabled";
-  $("#main").innerHTML='<div class="top"><div class="grow"><h1>Demo</h1><p class="sub" style="margin:0">Ten minutes, in this order. Keep this page on a second screen.</p></div></div>'+
-   '<div class="sec"><div class="sh"><div><div class="dclock" id="dclock">00:00 / 10:00</div><div class="fname" id="dleft"></div></div><div class="inline" style="margin:0"><button class="btn pri" data-act="demo-start" id="dstart">Start</button><button class="btn" data-act="demo-reset">Reset</button></div></div><div class="dtrack"><div id="dbar"></div></div></div>'+
+  $("#main").innerHTML='<div class="top"><div class="grow"><h1>Demo</h1><p class="sub" style="margin:0">'+(demo.mode==="pitch"?"One minute for the jury: one live moment, the rest in one sentence.":"Ten minutes, in this order.")+" Keep this page on a second screen."+'</p></div></div>'+
+   '<div class="sec"><div class="sh"><div><div class="dclock" id="dclock">00:00 / '+fmtClock(demoTotal())+'</div><div class="fname" id="dleft"></div></div><div class="inline" style="margin:0"><button class="btn pri" data-act="demo-start" id="dstart">Start</button><button class="btn" data-act="demo-reset">Reset</button><div class="seg"><button class="'+(demo.mode==="full"?"on":"")+'" data-act="demo-mode" data-m="full">10 min</button><button class="'+(demo.mode==="pitch"?"on":"")+'" data-act="demo-mode" data-m="pitch">1 min jury</button></div></div></div><div class="dtrack"><div id="dbar"></div></div></div>'+
    '<div class="sec"><div class="sh"><h2>Before you start</h2><button class="btn sm" data-act="demo-check"'+dis+'>Check everything</button></div><p class="sd">'+(remote?"Press the button: it checks the plugin, the master switch, the alert light and your volume.":"Open this page from the plugin (http://127.0.0.1:8787/) to use the demo buttons.")+'</p><div class="fname" id="dcheck" style="white-space:pre-line"></div></div>'+
-   DEMO.map((s,i)=>'<div class="sec dseg"><div class="sh"><h2>'+fmtClock(s.t)+" · "+s.title+'</h2><button class="btn sm ghost" data-act="demo-jump" data-i="'+i+'">Go to this part</button></div>'+
+   DEM().map((s,i)=>'<div class="sec dseg"><div class="sh"><h2>'+fmtClock(s.t)+" · "+s.title+'</h2><button class="btn sm ghost" data-act="demo-jump" data-i="'+i+'">Go to this part</button></div>'+
      '<p class="dsay">“'+esc(s.say)+'”</p><ul class="dlist">'+s.todo.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>"+
      (s.btns.length?'<div class="inline">'+s.btns.map(b=>'<button class="btn sm" data-act="demo-do" data-d="'+b[0]+'"'+dis+'>'+esc(b[1])+"</button>").join("")+"</div>":"")+"</div>").join("");
   demoPaint();
@@ -867,8 +887,9 @@ document.addEventListener("click",e=>{
       if(k==="reset"){ P.phase="work"; P.round=1; P.run=false; P.left=S.features.pomodoro.params.work*60; pomoPaint(); }
       break; }
    case "demo-start": if(demo.run){ demo.at=demoElapsed(); demo.run=false; clearInterval(demo.timer); } else { demo.t0=Date.now(); demo.run=true; clearInterval(demo.timer); demo.timer=setInterval(demoPaint,500); } demoPaint(); break;
+   case "demo-mode": demo.mode=t.dataset.m==="pitch"?"pitch":"full"; demo.run=false; demo.at=0; demo.lastK=-1; clearInterval(demo.timer); renderDemo(); break;
    case "demo-reset": demo.lastK=-1; demo.run=false; demo.at=0; clearInterval(demo.timer); demoPaint(); break;
-   case "demo-jump": demo.lastK=-1; demo.at=DEMO[+t.dataset.i].t; demo.t0=Date.now(); if(!demo.run){ demo.run=true; clearInterval(demo.timer); demo.timer=setInterval(demoPaint,500); } demoPaint(); break;
+   case "demo-jump": demo.lastK=-1; demo.at=DEM()[+t.dataset.i].t; demo.t0=Date.now(); if(!demo.run){ demo.run=true; clearInterval(demo.timer); demo.timer=setInterval(demoPaint,500); } demoPaint(); break;
    case "demo-do": if(t.dataset.d==="go-dash") location.hash="#/"; else if(t.dataset.d==="go-brightness") location.hash="#/f/brightness"; else demoDo(t.dataset.d); break;
    case "demo-check": demoCheck(); break;
    case "bh-sim": bhRun(t.dataset.s); break;
