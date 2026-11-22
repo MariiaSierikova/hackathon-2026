@@ -61,6 +61,22 @@ dotnet build -c Release -p:LinkPlugin=false                      # compile in sr
 - **Systems:** macOS via `osascript` (tested: read and set-same-value on a real Mac). Windows via Core Audio (`IAudioEndpointVolume`): written from the documented interface, compiles, **not run on Windows yet**. Other systems do nothing.
 - The camera side only needs to send the face width (or the ratio) and "face seen / not seen". Nothing here opens the camera.
 
+## Person behind: only when someone comes TO you (no camera needed to build or test)
+`Session/PersonBehind.cs` (decision), `Session/BehindResponse.cs` (what you can do), `Actions/PersonBehindCommand.cs` (Actions Ring / Keypad actions).
+Headphones on: you cannot hear a colleague arrive, so the alert is the mouse buzz (pattern "Alert"), the Keypad "SOMEONE BEHIND YOU" screen and the screen notification (all three on by default; the team table had screen only).
+- **Input (any detector, or the page's simulator):** `POST /behind {"id":2,"x":0.62,"size":0.07}` a few times a second for every second face (`x` 0 = left .. 1 = right of the picture, `size` = face width / picture width, `id` optional but needed for two people at once); `POST /behind/clear` when nobody is there. Nothing here opens the camera.
+- **Walking past vs coming:** each person is followed for a few seconds. Sideways speed is measured in face widths per second, so it does not depend on distance (a person walking by moves 5+ face widths a second; someone standing moves < 1).
+  - **Walking past** (> 2.5 face widths/s sideways): ignored.
+  - **Coming** (face grows 25 % or more in about 3 s without crossing sideways): alert, severity 0.9.
+  - **Stays** (seen for 3 s or more, hardly moving sideways): alert, severity 0.7.
+  - **Too far** (face smaller than a person at "Only count people within", default 3 m; face width is about 0.08 of the picture at 1 m on a 90 degree lens): ignored.
+  - Everyone needs to be seen for "A second face for at least" (2 s) first. "Ignore people who just walk past" off = any second face for that long alerts (severity 0.6). One alert per visit; the policy's 60 s cooldown still applies.
+- **What happens by itself** ("When someone comes to me"): *Only notify me* (default), *Hide windows (my shortcut)* (presses the shortcut you recorded, optional "bring back" shortcut and "bring back after N s"), or *Lock the screen* (macOS Ctrl+Cmd+Q, Windows Win+L). Windows: record ⌘ for the Windows key; Win+D hides and brings back.
+- **Mouse ring and keypad:** in Options+ open the MX Master 4 -> **Actions Ring** and drag the actions under **Desk Coach: person behind** onto ring buttons (also work on Keypad keys): Hide my screen, Show my screen again, Pause / resume music, Talk mode (lowers the system volume to "Talk mode volume", default 30 %, never raises it, restores on the second press unless you changed it), It is fine (dismisses and ignores visitors for a minute), Snooze 15 min.
+  The same actions: `POST /behind/do/hide|back|lock|music|talk|ok|snooze`. `GET /behind` shows who is tracked and why (for tuning).
+- **Not verified:** assigning these to the Actions Ring inside Options+ (needs the UI); the shortcuts on a real Mac or Windows PC (use the page's Test buttons: "Hide my screen" really presses your shortcut); the thresholds on real camera data (2.5 / 1.0 face widths/s, +25 %, 0.08 at 1 m are reasoned defaults, not measured); a second-face detector with person ids (the LogiInsight camera reports one face only).
+- Ideas not built: duck the music automatically when someone approaches; a quiet "someone is waiting" reminder if you dismissed a visitor who stays.
+
 ## How the Python detectors fit (integration, 2026-11-22)
 - **One Pomodoro clock: the plugin's.** `pomodoro_monitor.py` now only sends presence (`/signal/presence/true|false`); `--own-timer` is the old
   standalone mode (do not combine). See `docs/POMODORO.md`.

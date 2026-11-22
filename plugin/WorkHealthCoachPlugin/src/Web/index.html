@@ -223,6 +223,8 @@ const COLORS = ["#ff4d4f","#ffb020","#ffd43b","#2ee6a8","#3da5ff","#9b6bff","#ff
 
 /* ============ feature definitions (recommended defaults) ============ */
 /* NOTE: numbers are research-based placeholders; replace with the team's agreed values. */
+const MAC=/Mac/i.test(navigator.platform||"");
+const BEHIND_ACTS=["Only notify me","Hide windows (my shortcut)","Lock the screen"];
 const FEATURES = [
  {id:"speed",name:"Speech speed",blurb:"Warns when you talk too fast or too slow.",
   params:[
@@ -288,15 +290,19 @@ const FEATURES = [
    {k:"resume",label:"Resume when I return",type:"toggle",def:true}],
   texts:[["text","Volume raised","Volume raised, you are far away"],["text2","Paused","Paused. You left the desk"]],
   cd:{def:0,min:0,max:300,note:"No cooldown by default: it follows your distance."},def:{on:true,ch:{},sound:"chime",haptic:"tap",color:"#9b6bff",effect:"steady"}},
- {id:"behind",name:"Person behind you",blurb:"Spots someone behind you and hides your screen.",
+ {id:"behind",name:"Person behind you",blurb:"Tells you when a colleague comes to your desk, not when they just walk past.",
   params:[
-   {g:"Detection",k:"hold",label:"A second face for at least",unit:" s",min:.5,max:10,step:.5,def:2,help:"Avoids false alarms from someone just walking past."},
+   {g:"Detection",k:"hold",label:"A second face for at least",unit:" s",min:.5,max:10,step:.5,def:2,help:"Someone who is only seen for a moment never counts."},
    {k:"range",label:"Only count people within",unit:" m",min:1,max:6,step:.5,def:3},
-   {g:"What happens",k:"act",label:"When detected",type:"select",opts:["Hide all windows","Blur the screen","Switch to a safe app","Lock the screen","Only notify me"],def:"Hide all windows"},
-   {k:"sc",label:"Shortcut that does it",type:"shortcut",def:"⌘ ⌥ H",help:"Sent to your computer, so you can use any hide-everything shortcut."},
-   {k:"back",label:"Restore when they leave after",unit:" s",min:0,max:60,step:1,def:5,off0:true,help:"0 = never restore automatically."}],
+   {k:"passby",label:"Ignore people who just walk past",type:"toggle",def:true,help:"Alert only when someone comes closer to you or stays behind you. Off = any second face counts."},
+   {k:"linger",label:"…or who stays behind me for",unit:" s",min:2,max:15,step:1,def:3,dep:"passby",help:"Someone standing still behind your chair."},
+   {g:"What happens by itself",k:"act",label:"When someone comes to me",type:"select",opts:BEHIND_ACTS,def:"Only notify me",help:"The alert (buzz, keypad, screen) always comes. This is an extra step."},
+   {k:"sc",label:"Shortcut that hides my windows",type:"shortcut",def:MAC?"⌘ ⌥ H":"⌘ D",help:"Pressed for you. Check that it hides what you want with the Test button below. Windows: ⌘ means the Windows key."},
+   {k:"scBack",label:"Shortcut that brings them back",type:"shortcut",def:MAC?"":"⌘ D",help:"Optional. Windows key + D works for both."},
+   {k:"back",label:"Bring them back when the person has gone for",unit:" s",min:0,max:60,step:1,def:0,off0:true,help:"0 = never automatically."},
+   {g:"Mouse ring",k:"duck",label:"Talk mode volume",unit:" %",min:0,max:80,step:5,def:30,help:"The ring action “Talk mode” lowers your music to this so you can hear them. Press again to restore."}],
   texts:[["text","Message","Someone is behind you"]],
-  cd:{def:60,min:3,max:300},def:{on:true,ch:{screen:1},sound:"alert",haptic:"alert",color:"#ff4d4f",effect:"blink"}}
+  cd:{def:60,min:3,max:300},def:{on:true,ch:{screen:1,haptic:1,keypad:1},sound:"alert",haptic:"alert",color:"#ff4d4f",effect:"blink"}}
 ];
 const F = Object.fromEntries(FEATURES.map(f=>[f.id,f]));
 const KL={speed:"Pace",volume:"Voice",blink:"Blink",brightness:"Soon",pomodoro:"Focus",distance:"Far",behind:"Behind",master:"Master",present:"Present"};
@@ -330,6 +336,8 @@ function merge(a,b){ if(b===undefined||b===null) return a;
   const o={...a}; for(const k in b) o[k]=k in a?merge(a[k],b[k]):b[k]; return o; }
 let S=defaults(), saveWarn=false;
 try{ const raw=localStorage.getItem(KEY); if(raw) S=merge(defaults(),JSON.parse(raw)); }catch(e){}
+function fixS(){ const p=S.features.behind&&S.features.behind.params; if(p&&!BEHIND_ACTS.includes(p.act)) p.act="Only notify me"; }
+fixS();
 function save(){ S.muted=(PROFILES[S.profile]||{}).mute||[]; try{ localStorage.setItem(KEY,JSON.stringify(S)); saveWarn=false; }catch(e){ saveWarn=true; } if(remote) schedulePush(); }
 
 /* ---- connection to the Coach plugin (page served by the plugin at http://127.0.0.1:8787/) ----
@@ -344,7 +352,7 @@ async function pushNow(){ clearTimeout(pushT); if(!remote) return;
   catch(e){ remote=false; renderAll(); } }
 function busyEditing(){ const a=document.activeElement; return !!(a&&a.closest&&a.closest("#main")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName)); }
 async function pollState(){ if(!remote) return;
-  try{ const j=await (await fetch("/ui-state")).json(); if(j.rev&&j.rev!==lastRev&&!busyEditing()){ S=merge(defaults(),j); lastRev=j.rev; applyTheme(); renderAll(); } }catch(e){} }
+  try{ const j=await (await fetch("/ui-state")).json(); if(j.rev&&j.rev!==lastRev&&!busyEditing()){ S=merge(defaults(),j); fixS(); lastRev=j.rev; applyTheme(); renderAll(); } }catch(e){} }
 function applyPomo(j){ const P=ui.pomo; if(!P||!j||!j.phase) return; const was=P.away;
   P.phase=j.phase; P.round=j.round; P.left=j.left; P.run=j.running; P.away=!j.atDesk; ui.keyTimer=j.active; pomoPaint();
   if(was!==P.away&&ui.route==="f/pomodoro") renderMain(); }
@@ -352,6 +360,43 @@ async function pollPomo(){ if(!remote) return; try{ applyPomo(await (await fetch
 function plugPost(path,body){ return fetch(path,{method:"POST",headers:JSONH,body:body?JSON.stringify(body):undefined}).then(r=>r.json()).then(applyPomo).catch(()=>{}); }
 async function plugDeliver(id,tk,chans){ await pushNow(); const name=TRIG[id][tk==="text2"?1:0];
   for(const only of chans.filter(c=>c==="haptic"||c==="keypad")){ try{ await fetch("/trigger",{method:"POST",headers:JSONH,body:JSON.stringify({trigger:name,severity:1,force:true,only})}); }catch(e){} } }
+/* ---- person behind: scripted walkers instead of a camera. The real detector sends the same samples:
+   POST /behind {"id":2,"x":0.62,"size":0.07}  (x 0..1 across the picture, size = face width / picture width) ---- */
+let bhTimer=null;
+function bhStop(){ if(bhTimer){ clearInterval(bhTimer); bhTimer=null; } }
+function bhRun(kind){
+  if(!remote) return; bhStop();
+  if(kind==="none"){ fetch("/behind/clear",{method:"POST"}).catch(()=>{}); return; }
+  const id=Math.floor(Date.now()/1000)%100000, t0=Date.now();
+  const plan={pass:{secs:3.2,f:t=>[0.02+0.3*t,0.06]},come:{secs:5,f:t=>[0.5,0.03+0.02*t]},stand:{secs:8,f:t=>[0.55+0.01*Math.sin(t),0.07]}}[kind];
+  bhTimer=setInterval(()=>{ const t=(Date.now()-t0)/1000; if(t>plan.secs){ bhStop(); return; } const [x,size]=plan.f(t);
+    fetch("/behind",{method:"POST",headers:JSONH,body:JSON.stringify({id,x,size})}).catch(()=>{}); },125);
+}
+function behindSimHTML(){
+  const dis=remote?"":" disabled";
+  const b=(s,l)=>'<button class="btn" data-act="bh-sim" data-s="'+s+'"'+dis+">"+l+"</button>";
+  const a=(x,l)=>'<button class="btn" data-act="bh-do" data-a="'+x+'"'+dis+">"+l+"</button>";
+  return '<div class="sec"><div class="sh"><h2>Try it without the camera</h2></div><p class="sd">'+
+   (remote?"Plays a made-up person behind you. Walking past should be ignored; coming to your desk or standing behind you should buzz the mouse and light the keypad.":"Open this page from the plugin (http://127.0.0.1:8787/) to try it.")+"</p>"+
+   '<div class="inline">'+b("pass","Someone walks past")+b("come","Someone comes to my desk")+b("stand","Someone stands behind me")+b("none","Nobody")+"</div>"+
+   '<div class="fname" id="bhstat" style="white-space:pre-line;margin-top:8px">…</div>'+
+   '<p class="sd">For the camera code: <kbd>POST /behind {"id":2,"x":0.62,"size":0.07}</kbd> a few times a second for every second face; stop sending when nobody is there.</p></div>'+
+   '<div class="sec"><div class="sh"><h2>Mouse ring and keypad actions</h2></div><p class="sd">With headphones on you feel the buzz, then choose with the mouse. In Options+ open your MX Master 4, choose <b>Actions Ring</b>, and put these under <b>Desk Coach: person behind</b> (they work on Keypad keys too). The buttons below do the same thing right now.</p>'+
+   '<div class="inline">'+a("hide","Hide my screen (presses your shortcut)")+a("back","Show my screen again")+a("music","Pause / resume music")+a("talk","Talk mode (lower music)")+a("ok","It is fine")+a("snooze","Snooze 15 min")+"</div>"+
+   '<p class="sd">“It is fine” dismisses the alert and ignores visitors for a minute. “Pause music” is the Play/Pause key, a toggle. I could not check the Actions Ring inside Options+ from here.</p></div>';
+}
+async function pollBehind(){
+  if(!remote||ui.route!=="f/behind") return;
+  try{
+    const j=await (await fetch("/behind")).json(), el=$("#bhstat"); if(!el) return;
+    const lines=j.tracks.length?j.tracks.map(t=>"Person "+t.id+": "+t.verdict+" (seen "+t.seen+" s)"):["Nobody in view"];
+    const flags=[j.hidden&&"screen hidden",j.talk&&"talk mode on",j.musicPaused&&"music paused",j.ack&&"dismissed for a minute"].filter(Boolean);
+    if(j.lastAlert) lines.push("Last alert: "+j.lastAlert);
+    if(flags.length) lines.push(flags.join(" · "));
+    if(j.history.length) lines.push("Before: "+j.history.slice(-3).join("; "));
+    el.textContent=lines.join("\n");
+  }catch(e){}
+}
 /* ---- volume when far: a camera-free simulator. The real detector sends the same two things:
    POST /distance {"ratio":0.6} (face size vs normal) and /signal/presence/true|false ---- */
 function farSimHTML(){
@@ -384,9 +429,9 @@ async function connect(){
   try{
     const r=await fetch("/ui-state"); if(!r.ok) throw new Error("no plugin"); const j=await r.json(); remote=true;
     const complete=j.features&&j.features.speed&&j.features.speed.cooldown!==undefined&&j.features.pomodoro&&j.features.pomodoro.params;
-    if(j.features){ S=merge(defaults(),j); lastRev=j.rev||0; applyTheme(); }
+    if(j.features){ S=merge(defaults(),j); fixS(); lastRev=j.rev||0; applyTheme(); }
     if(!complete){ S.muted=(PROFILES[S.profile]||{}).mute||[]; await pushNow(); }
-    renderAll(); setInterval(pollState,2000); setInterval(pollPomo,1000); setInterval(pollFar,1000); pollPomo();
+    renderAll(); setInterval(pollState,2000); setInterval(pollPomo,1000); setInterval(pollFar,1000); setInterval(pollBehind,1000); pollPomo();
   }catch(e){ remote=false; }
 }
 const ui={tab:{},route:"",rec:null,pomo:null,farRatio:100,farAway:false};
@@ -527,7 +572,7 @@ function paramRow(d,f,p){
   let ctl;
   if(p.type==="toggle") ctl=toggleSw(v,"ptoggle",'data-id="'+d.id+'" data-k="'+p.k+'"');
   else if(p.type==="select") ctl='<select data-act="psel" data-id="'+d.id+'" data-k="'+p.k+'">'+p.opts.map(o=>'<option '+(o===v?"selected":"")+">"+o+"</option>").join("")+"</select>";
-  else if(p.type==="shortcut") ctl='<kbd id="sc-'+d.id+'">'+esc(v)+'</kbd><button class="btn sm" data-act="rec-sc" data-id="'+d.id+'" data-k="'+p.k+'">Record</button>';
+  else if(p.type==="shortcut") ctl='<kbd id="sc-'+d.id+'-'+p.k+'">'+(esc(v)||"none")+'</kbd><button class="btn sm" data-act="rec-sc" data-id="'+d.id+'" data-k="'+p.k+'">Record</button>';
   else ctl='<input type="range" min="'+p.min+'" max="'+p.max+'" step="'+p.step+'" value="'+v+'" data-act="prange" data-id="'+d.id+'" data-k="'+p.k+'"><output>'+fmtP(p,v)+"</output>";
   return (p.g?'<div class="grp">'+p.g+"</div>":"")+'<div class="row '+(dis?"dis":"")+'"><div class="lbl"><b>'+p.label+"</b>"+(p.help?"<small>"+p.help+"</small>":"")+'</div><div class="ctl">'+ctl+rs+"</div></div>";
 }
@@ -583,7 +628,7 @@ function renderDetail(id){
   $("#main").innerHTML=
    '<div class="crumb"><button data-act="go" data-to="">‹ Dashboard</button> / '+d.name+"</div>"+
    '<div class="dhead"><div class="ico"><img class="px" src="'+iconSrc(id)+'" alt=""></div><div class="grow"><h1>'+d.name+'</h1><p class="sub" style="margin:0">'+d.blurb+"</p></div>"+toggleSw(f.enabled,"toggle",'data-id="'+id+'"')+"</div>"+
-   (id==="pomodoro"?pomoHTML():"")+(id==="distance"?farSimHTML():"")+
+   (id==="pomodoro"?pomoHTML():"")+(id==="distance"?farSimHTML():"")+(id==="behind"?behindSimHTML():"")+
    '<div class="sec"><div class="sh"><h2>When it triggers</h2><button class="btn sm ghost" data-act="reset-params" data-id="'+id+'">Reset to recommended</button></div>'+d.params.map(p=>paramRow(d,f,p)).join("")+"</div>"+
    '<div class="sec"><div class="sh"><h2>How you are notified</h2><button class="btn sm ghost" data-act="reset-fb" data-id="'+id+'">Reset to recommended</button></div>'+
    '<p class="sd">Pick one or more. Each type has its own settings below.</p>'+
@@ -618,7 +663,7 @@ function renderMain(){
   $("#main").scrollTop=sc;
 }
 function renderAll(){ renderSide(); renderMain(); renderRail(); }
-function route(){ const was=ui.route; ui.route=(location.hash||"#/").replace(/^#\/?/,""); if(was==="f/distance"&&ui.route!==was) farReset(); $("#main").scrollTop=0; renderAll(); }
+function route(){ const was=ui.route; ui.route=(location.hash||"#/").replace(/^#\/?/,""); if(was==="f/distance"&&ui.route!==was) farReset(); if(was==="f/behind"&&ui.route!==was) bhStop(); $("#main").scrollTop=0; renderAll(); }
 addEventListener("hashchange",route);
 
 /* ============ concept feature + keypad timer ============ */
@@ -714,6 +759,8 @@ document.addEventListener("click",e=>{
       if(k==="skip") pomoNext(false);
       if(k==="reset"){ P.phase="work"; P.round=1; P.run=false; P.left=S.features.pomodoro.params.work*60; pomoPaint(); }
       break; }
+   case "bh-sim": bhRun(t.dataset.s); break;
+   case "bh-do": fetch("/behind/do/"+t.dataset.a,{method:"POST"}).then(()=>pollBehind()).catch(()=>{}); break;
    case "far-away": { ui.farAway=!ui.farAway; plugPost("/presence",{atDesk:!ui.farAway}); t.textContent=ui.farAway?"I am back":"I leave the frame"; break; }
    case "export": { const b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"}), u=URL.createObjectURL(b), l=document.createElement("a"); l.href=u; l.download="desk-coach-settings.json"; l.click(); setTimeout(()=>URL.revokeObjectURL(u),1000); break; }
    case "wipe": if(confirm("Reset all Desk Coach settings?")){ S=defaults(); save(); renderAll(); } break;
@@ -742,12 +789,12 @@ document.addEventListener("change",e=>{
 
 /* ---- shortcut + voice recording ---- */
 function recordShortcut(id,k,btn){
-  btn.textContent="Press keys…"; const out=$("#sc-"+id);
+  btn.textContent="Press keys…"; const out=$("#sc-"+id+"-"+k);
   const h=ev=>{ ev.preventDefault();
     if(ev.key==="Escape"){ done(S.features[id].params[k]); return; }
     if(["Meta","Control","Alt","Shift"].includes(ev.key)) return;
     const parts=[ev.metaKey&&"⌘",ev.ctrlKey&&"Ctrl",ev.altKey&&"⌥",ev.shiftKey&&"⇧",ev.key.length===1?ev.key.toUpperCase():ev.key].filter(Boolean);
-    if(parts.length<2){ return; } const v=parts.join(" "); S.features[id].params[k]=v; save(); done(v); };
+    if(parts.length<2&&!/^F\d+$/.test(parts[0])){ return; } const v=parts.join(" "); S.features[id].params[k]=v; save(); done(v); };
   const done=v=>{ removeEventListener("keydown",h,true); out.textContent=v; btn.textContent="Record"; };
   addEventListener("keydown",h,true);
 }
