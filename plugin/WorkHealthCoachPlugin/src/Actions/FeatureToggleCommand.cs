@@ -35,7 +35,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
             this.AddParameter("master", "Master switch", Group);
             this.AddParameter("present", "Presenting mode (silent)", Group);
-            this.AddParameter("alert", "Alert light (shows alerts, nothing else)", Group);
+            this.AddParameter("alert", "Alert light (alerts on / off, shows alerts)", Group);
         }
 
         // Every key of this command is a "variation" (a parameter). The Logitech docs say ActionImageChanged() without a
@@ -61,6 +61,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
             UiSettings.Changed += this.RedrawAll;
             PomodoroState.Changed += this.RedrawPomodoro;
             SessionState.Changed += this.RedrawIfAlert;
+            NotificationPolicy.Changed += this.RedrawAll;
 
             // While an alert is showing, every Desk Coach key flashes the same alert; this timer animates it and puts the icons back afterwards.
             this._blinker = new System.Timers.Timer(400) { AutoReset = true };
@@ -74,6 +75,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
             UiSettings.Changed -= this.RedrawAll;
             PomodoroState.Changed -= this.RedrawPomodoro;
             SessionState.Changed -= this.RedrawIfAlert;
+            NotificationPolicy.Changed -= this.RedrawAll;
             this._blinker?.Stop();
             this._blinker?.Dispose();
             return true;
@@ -119,6 +121,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     UiSettings.TogglePresenting();
                     break;
                 case "alert":
+                    NotificationPolicy.SetAlerts(!NotificationPolicy.AlertsOn);
                     break;
                 default:
                     UiSettings.SetFeatureEnabled(actionParameter, !UiSettings.FeatureEnabled(actionParameter));
@@ -157,7 +160,9 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
                 if (actionParameter == "alert")
                 {
-                    return Render.Tile(px, "DESK COACH", "OK", Render.Ok, "no alert");
+                    return NotificationPolicy.AlertsOn
+                        ? Render.Tile(px, "ALERTS", "ON", Render.Ok, "press = off")
+                        : Render.Tile(px, "ALERTS", "OFF", Render.Bad, "press = on");
                 }
 
                 var on = IsOn(actionParameter);

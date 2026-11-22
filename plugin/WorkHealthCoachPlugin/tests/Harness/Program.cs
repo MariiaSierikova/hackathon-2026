@@ -627,6 +627,20 @@ try
     UiSettings.TogglePresenting();
     Check("Presenting off: keys are back", Changed(baseline, Snapshot()) == "");
 
+    // The Alert light key: off = no alert of any kind reaches the user.
+    NotificationPolicy.SetAlerts(false);
+    Check("Alert light off: ONLY the Alert light key changes", Changed(baseline, Snapshot()) == "alert", $"changed: {Changed(baseline, Snapshot())}");
+    var later1 = DateTime.UtcNow.AddDays(30);
+    Check("alerts off: every kind of alert is dropped", new[] { "person_behind", "speak_up", "break_due", "pace_too_fast", "blink_low", "time_warning" }
+        .All(t => NotificationPolicy.Decide(new TriggerMessage(t, 1.0), later1) == null));
+    Check("alerts off: a forced test trigger still goes through (development switch)", NotificationPolicy.Decide(new TriggerMessage("speak_up", 1.0, true), later1) != null);
+    Check("alerts off survives a restart (settings.json)", PolicySettings.FromJson(NotificationPolicy.Settings.ToJson()).AlertsOn == false);
+    SessionState.OnTrigger(new TriggerMessage("person_behind", 1.0));
+    NotificationPolicy.SetAlerts(false);
+    Check("switching alerts off clears an alert that is showing", !SessionState.TakeoverActive);
+    NotificationPolicy.SetAlerts(true);
+    Check("Alert light on: back to the first picture", Changed(baseline, Snapshot()) == "");
+
     UiSettings.SetFeatureEnabled("behind", false);
     var offKeys = new[] { "speed", "volume", "blink", "distance" };
     foreach (var k in offKeys) { UiSettings.SetFeatureEnabled(k, false); }

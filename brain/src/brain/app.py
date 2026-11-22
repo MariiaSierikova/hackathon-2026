@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "brain" / "vendor" / "logiinsight"))
 sys.path.insert(0, str(ROOT / "overlay"))
 
 from brain.monitors import behind_monitor, blink_monitor, pace_monitor, pomodoro_monitor  # noqa: E402
+from brain.supervisor import Supervisor, read_switches  # noqa: E402
 
 
 def list_devices():
@@ -50,6 +51,7 @@ def main():
     ap.add_argument("--no-overlay", action="store_true", help="do not show the on-screen owl/snail")
     blink_monitor.add_args(ap)
     ap.add_argument("--pomodoro", action="store_true", help="Pomodoro: send desk presence from the Gaze Tracker app to the plugin (the plugin owns the clock) and show the status chip")
+    ap.add_argument("--auto", action="store_true", help="start/stop the gaze tracking (+ timer chip), --mic and --ir-device monitors by themselves, following the Keypad keys / settings page (docs/AUTO.md)")
     pomodoro_monitor.add_args(ap)
     ap.add_argument("--behind", action="store_true", help="look for a second person behind you with the camera's infrared stream (see --ir-device)")
     behind_monitor.add_args(ap)
@@ -70,6 +72,8 @@ def main():
         pace_monitor.run(a, threading.Event(), print)
         return
 
+    if a.auto:
+        a.no_blink = a.no_blink or a.device is None      # blink is not managed (camera AI overheats); only with an explicit --device
     if not a.simulate and not a.no_blink and a.device is None:
         sys.exit("Which camera? Run with --list to see the numbers, then add --device N (or use --no-blink to skip the camera, "
                  "or --simulate to test without hardware).")
@@ -86,12 +90,39 @@ def main():
     threads = []
     if not a.no_blink:
         threads.append(threading.Thread(target=blink_monitor.run, args=(a, stop, say_for("blink")), name="blink", daemon=True))
-    if not a.no_pace:
-        threads.append(threading.Thread(target=pace_monitor.run, args=(a, stop, say_for("pace")), name="pace", daemon=True))
-    if a.pomodoro:
-        threads.append(threading.Thread(target=pomodoro_monitor.run, args=(a, stop, say_for("pomo")), name="pomo", daemon=True))
-    if a.behind:
-        threads.append(threading.Thread(target=behind_monitor.run, args=(a, stop, say_for("behind")), name="behind", daemon=True))
+    if a.auto:
+        # the monitors follow the plugin's switches: started and stopped by the supervisor
+        runs = {"gaze": (pomodoro_monitor.run, "gaze"), "pace": (pace_monitor.run, "pace"), "behind": (behind_monitor.run, "behind")}
+        running = {}
+
+        def start_monitor(name):
+            fn, tag = runs[name]
+            ev = threading.Event()
+            t = threading.Thread(target=fn, args=(a, ev, say_for(tag)), name=name, daemon=True)
+            running[name] = (t, ev)
+            t.start()
+
+        def stop_monitor(name):
+            t, ev = running.pop(name, (None, None))
+            if ev is not None:
+                ev.set()
+                t.join(timeout=5)
+
+        available = {"gaze"} | ({"pace"} if (a.mic is not None or a.simulate) else set()) | ({"behind"} if (a.ir_device is not None or a.simulate) else set())
+        from brain.bridge.client import CoachClient
+        sup = Supervisor(lambda c=CoachClient(): read_switches(c), start_monitor, stop_monitor,
+                         lambda n: n in running and running[n][0].is_alive(), available, say=say_for("auto"))
+        say_for("auto")(f"watching the plugin's switches; can start: {', '.join(sorted(available))}"
+                        + ("" if "pace" in available else "   (add --mic N to let Speech speed / volume follow the switches)")
+                        + ("" if "behind" in available else "   (add --ir-device N for Person behind)"))
+        threads.append(threading.Thread(target=sup.loop, args=(stop,), name="auto", daemon=True))
+    else:
+        if not a.no_pace:
+            threads.append(threading.Thread(target=pace_monitor.run, args=(a, stop, say_for("pace")), name="pace", daemon=True))
+        if a.pomodoro:
+            threads.append(threading.Thread(target=pomodoro_monitor.run, args=(a, stop, say_for("pomo")), name="pomo", daemon=True))
+        if a.behind:
+            threads.append(threading.Thread(target=behind_monitor.run, args=(a, stop, say_for("behind")), name="behind", daemon=True))
     if not threads:
         sys.exit("Nothing to run: you disabled both blink and pace.")
 
@@ -114,7 +145,7 @@ def main():
     from PySide6 import QtCore
 
     app, _ov = overlay_module.start()
-    if a.pomodoro:
+    if a.pomodoro or a.auto:
         import pomodoro_chip
         chip = pomodoro_chip.Chip(pomodoro_monitor.get_status)   # keep the reference, or Qt deletes it  # noqa: F841
     say_for("app")("Overlay window ready (invisible until the owl or the snail is needed). Ctrl+C stops everything.")

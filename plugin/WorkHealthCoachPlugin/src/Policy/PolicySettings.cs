@@ -37,6 +37,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public Int32 TotalMinutes { get; set; } = 20;
         public Int32 WarnMinutes { get; set; } = 1;
         public Boolean Master { get; set; } = true;                // master switch: off = nothing reaches the user
+        public Boolean AlertsOn { get; set; } = true;              // the "Alert light" key: off = no alert reaches the user (features keep working)
         public String Profile { get; set; } = "everyday";          // settings-page profile (everyday | presenting | focus | meeting | custom)
         public List<String> Muted { get; set; } = new();           // channels silenced by the profile: audio | screen | haptic | keypad
         public Dictionary<String, TriggerRule> Triggers { get; set; } = new();

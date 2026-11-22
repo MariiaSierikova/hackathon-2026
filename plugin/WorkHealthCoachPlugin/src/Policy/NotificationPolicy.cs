@@ -68,6 +68,22 @@ namespace Loupedeck.WorkHealthCoachPlugin
             Changed?.Invoke();
         }
 
+        // The "Alert light" key: off = nothing is shown, buzzed or played for ANY alert (the features themselves keep running: Pomodoro clock, volume when far ...).
+        public static Boolean AlertsOn => Settings.AlertsOn;
+
+        public static void SetAlerts(Boolean on)
+        {
+            Settings.AlertsOn = on;
+            Settings.Save();
+            if (!on)
+            {
+                SessionState.DismissAlert();   // whatever is showing right now goes away
+            }
+
+            PluginLog.Info($"Alerts switched {(on ? "ON" : "OFF")} (Alert light key)");
+            Changed?.Invoke();
+        }
+
         public static void CycleStrength()
         {
             var i = Array.IndexOf(PolicySettings.Strengths, Settings.HapticStrength);
@@ -134,6 +150,11 @@ namespace Loupedeck.WorkHealthCoachPlugin
             if (!Settings.Master)
             {
                 return Drop(m, "master switch off");
+            }
+
+            if (!Settings.AlertsOn)
+            {
+                return Drop(m, "alerts switched off (Alert light key)");
             }
 
             if (!Settings.Triggers.TryGetValue(m.Trigger, out var rule))
