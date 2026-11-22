@@ -86,8 +86,11 @@ Headphones on: you cannot hear a colleague arrive, so the alert is the mouse buz
   because an existing `settings.json` may still carry the old 5 s escalation).
 - **Duck / snail / owl** are driven by `speak_up` / `pace_too_fast` / `blink_low` through the page's "screen" channel; `speak_ok`, `pace_ok`, `blink_detected` end them.
   The **Presenting** profile mutes the screen channel, so the animals do not show in that profile (harness check "presenting mutes the on-screen channel").
-- **Thresholds on the page are not read by the Python detectors yet** (speed wpm, volume dB, blink rate, "second face for N s"). Only the plugin side is applied
-  (on/off, cooldown, channels, haptic pattern, Pomodoro timings). The detectors keep their own defaults (`--fast-rate`, `--quiet-db`, `--no-blink-after`).
+- **Sliders that the detectors follow** (re-read every 3 s while running, `brain/src/brain/settings.py`): Speech speed "too fast above N wpm" (-> syllables/s = wpm x 1.5 / 60;
+  170 wpm = 4.25) and Speech volume "Volume floor" (page dB - 75 = dBFS, so the page default 50 = -25 dBFS, the tested threshold). Precedence: command-line flag > page > built-in default.
+  `app.py --calibrate-volume` (speak normally 10 s) moves the Volume floor slider to 10 dB below your level. NOT wired (no detector yet): "too slow", target pace, measuring windows,
+  "too loud", blink rate, the second-face hold time. Note: the page's default 170 wpm (4.25 syll/s) is more sensitive than the old built-in 5.0 (200 wpm); check your normal rate in the
+  `rate:` log line and adjust the slider.
 - **Cooldown defaults** on first page open follow the team table (pace 30 s, blink 20 min, behind 60 s, speak up 30 s) and replace the plugin's 90 s / 5 min / 20 s / 90 s.
   Blink: 20 min cooldown and no mouse buzz by default, so a demo of the blink reminder needs `--force` or a lower cooldown / the haptic channel switched on.
 

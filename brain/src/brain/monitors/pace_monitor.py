@@ -22,16 +22,40 @@ sys.path.insert(0, str(HERE.parents[3] / "vendor" / "logiinsight"))
 from brain.audio.pace import RATE_RESET, RATE_THRESHOLD, FakeSource, MicSource, PaceState, syllables_to_wpm  # noqa: E402
 from brain.audio.loudness import OK_DBFS, QUIET_DBFS, LoudnessState  # noqa: E402
 from brain.bridge.client import PACE_TOO_FAST, SPEAK_OK, SPEAK_UP, CoachClient  # noqa: E402
+from brain.settings import calibrate_volume, page_db_to_dbfs, page_thresholds, wpm_to_syllables  # noqa: E402
 
 
 def add_args(ap):
     ap.add_argument("--mic", default=None, help="microphone number (see: app.py --list). Default: the camera microphone, else the default one")
-    ap.add_argument("--fast-rate", type=float, default=RATE_THRESHOLD, help=f"syllables/s that count as too fast (default {RATE_THRESHOLD})")
-    ap.add_argument("--ok-rate", type=float, default=RATE_RESET, help=f"back below this = pace fine again (default {RATE_RESET})")
-    ap.add_argument("--quiet-db", type=float, default=QUIET_DBFS, help=f"speech level (dBFS) below which you are too quiet (default {QUIET_DBFS})")
-    ap.add_argument("--ok-db", type=float, default=OK_DBFS, help=f"back above this = loud enough again (default {OK_DBFS})")
+    ap.add_argument("--fast-rate", type=float, default=None, help=f"syllables/s that count as too fast. Default: the settings page's 'too fast' slider, else {RATE_THRESHOLD}")
+    ap.add_argument("--ok-rate", type=float, default=None, help=f"back below this = pace fine again. Default: 0.7 below the fast limit (built-in {RATE_RESET})")
+    ap.add_argument("--quiet-db", type=float, default=None, help=f"speech level (dBFS) below which you are too quiet. Default: the page's 'Volume floor' slider, else {QUIET_DBFS}")
+    ap.add_argument("--ok-db", type=float, default=None, help=f"back above this = loud enough again. Default: 3 dB above the quiet limit (built-in {OK_DBFS})")
+    ap.add_argument("--calibrate-volume", action="store_true", help="speak normally for 10 s; the page's 'Volume floor' slider is set 10 dB below your normal level, then exit")
     ap.add_argument("--force", action="store_true", help="demo: the plugin skips its notification rules (cooldown etc.)")
     ap.add_argument("--simulate", action="store_true", help="NO microphone: fake talker, normal -> too fast (26-42 s) -> normal")
+
+
+def thresholds(a, page):
+    """CLI flag wins, then the settings page, then the built-in default. Returns (fast, ok_rate, quiet_dbfs, ok_dbfs, where)."""
+    where = []
+    if a.fast_rate is not None:
+        fast = a.fast_rate
+    elif "fast_wpm" in page:
+        fast = wpm_to_syllables(page["fast_wpm"])
+        where.append(f"too fast above {page['fast_wpm']:.0f} wpm (page)")
+    else:
+        fast = RATE_THRESHOLD
+    ok_rate = a.ok_rate if a.ok_rate is not None else (max(0.5, fast - (RATE_THRESHOLD - RATE_RESET)) if "fast_wpm" in page else RATE_RESET)
+    if a.quiet_db is not None:
+        quiet = a.quiet_db
+    elif "quiet_db" in page:
+        quiet = page_db_to_dbfs(page["quiet_db"])
+        where.append(f"voice floor {page['quiet_db']:.0f} dB = {quiet:.0f} dBFS (page)")
+    else:
+        quiet = QUIET_DBFS
+    ok_db = a.ok_db if a.ok_db is not None else (quiet + (OK_DBFS - QUIET_DBFS))
+    return fast, ok_rate, quiet, ok_db, where
 
 
 def run(a, stop, say=print):
@@ -50,16 +74,36 @@ def run(a, stop, say=print):
             say(f"ERROR: cannot open the microphone: {e}")
             return
 
-    state = PaceState(a.fast_rate, a.ok_rate)
-    loud = LoudnessState(getattr(a, "quiet_db", QUIET_DBFS), getattr(a, "ok_db", OK_DBFS))
+    if getattr(a, "calibrate_volume", False):
+        try:
+            calibrate_volume(coach, src, say)
+        finally:
+            src.close()
+        return
+
+    fast_rate, ok_rate, quiet_db, ok_db, where = thresholds(a, page_thresholds(coach))
+    state = PaceState(fast_rate, ok_rate)
+    loud = LoudnessState(quiet_db, ok_db)
+    shown = (round(fast_rate, 3), round(quiet_db, 1))
+    say(f"limits: too fast above {fast_rate:.2f} syllables/s ({syllables_to_wpm(fast_rate):.0f} wpm), too quiet below {quiet_db:.1f} dBFS"
+        + (f"   [{'; '.join(where)}]" if where else "   [built-in defaults: open the settings page once to use its sliders]"))
     was_fast = was_quiet = False
     t0 = time.time()
     t_status = 0.0
+    t_page = time.time()
     sent = 0
     try:
         while not stop.is_set():
             if a.simulate and src.finished:
                 break
+            if time.time() - t_page >= 3.0:                      # follow the sliders while running
+                t_page = time.time()
+                fr, orr, qd, od, where = thresholds(a, page_thresholds(coach))
+                state.fast_rate, state.ok_rate, loud.quiet_db, loud.ok_db = fr, orr, qd, od
+                if (round(fr, 3), round(qd, 1)) != shown:
+                    shown = (round(fr, 3), round(qd, 1))
+                    say(f"[{time.time() - t0:5.1f}s] settings page changed: too fast above {fr:.2f} syllables/s ({syllables_to_wpm(fr):.0f} wpm), "
+                        f"too quiet below {qd:.1f} dBFS")
             rate, speaking = src.read()
             fast = state.update(rate, speaking)
             if speaking:
