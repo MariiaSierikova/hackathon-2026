@@ -72,6 +72,13 @@ class GazeFeed:
             self._stop.wait(2.0)
 
 
+def face_width(snap):
+    """Face width as a fraction of the picture (Gaze Tracker snapshot), or None when no face is seen. Smaller = further away."""
+    box = ((snap or {}).get("face") or {}).get("bounding_box_norm") or {}
+    w = box.get("width")
+    return float(w) if isinstance(w, (int, float)) and w > 0 else None
+
+
 def observe(snap, margin=0.05):
     """Snapshot -> (present, focused). gaze is null when there is no face OR no calibration, so presence also uses `face`."""
     if not snap:
@@ -101,7 +108,7 @@ class FakeGaze:
         if 10 <= t < 22 or 58 <= t < 75:
             return {"screen": scr, "gaze": None, "face": None}
         x = 5000 if 35 <= t < 48 else 900
-        return {"screen": scr, "gaze": {"x_px": x, "y_px": 500}, "face": {"bounding_box_norm": {"x": .3}}}
+        return {"screen": scr, "gaze": {"x_px": x, "y_px": 500}, "face": {"bounding_box_norm": {"x": .3, "width": 0.18}}}
 
     @property
     def latest_at(self):
@@ -118,6 +125,9 @@ def add_args(ap):
     ap.add_argument("--gaze-url", default="ws://127.0.0.1:8964")
     ap.add_argument("--remind-every", type=float, default=2.0, help="seconds between break_due messages while a break is due (--own-timer only)")
     ap.add_argument("--status-every", type=float, default=10.0, help="seconds between status lines (use 2 while testing)")
+    ap.add_argument("--no-distance", action="store_true", help="do not send the face size to the plugin's 'Volume when far' feature")
+    ap.add_argument("--far-after", type=float, default=3.0, help="seconds without a face before 'out of the picture' counts as far away (the plugin then waits its own 'Act after')")
+    ap.add_argument("--calibrate-distance", action="store_true", help="sit at your NORMAL distance: measures your face size for 4 s and tells the plugin 'this is my normal distance', then exit")
     ap.add_argument("--selftest", action="store_true", help="15-second check of monitor -> plugin clock (no camera, no Gaze Tracker needed), then exit")
     ap.add_argument("--own-timer", action="store_true", help="old mode: keep the clock here and send break_due yourself (default: the plugin owns the clock)")
 
@@ -143,6 +153,7 @@ def run(a, stop, say=print):
     tracker = PomodoroTracker(cfg)
     last_presence, last_presence_sent, last_poll, hinted = None, 0.0, 0.0, False
     plugin, hinted_paused, desk_mismatch_since = None, False, None
+    last_face_t, last_dist_sent, last_base_check, calib_since, far_said = None, 0.0, 0.0, None, False
     t0 = time.monotonic()
     last_state, last_remind, last_status, warned = None, 0.0, t0, False
     try:
@@ -169,6 +180,35 @@ def run(a, stop, say=print):
                 if at_desk != last_presence or now - last_presence_sent >= 10:      # on change, and a heartbeat (plugin restarts)
                     coach.signal("presence", at_desk)
                     last_presence, last_presence_sent = at_desk, now
+                # ---- volume when far: face size, or "face gone" ----
+                if not getattr(a, "no_distance", False):
+                    w = face_width(snap)
+                    if w:
+                        last_face_t = now
+                        if far_said:
+                            say(f"[{now - t0:5.0f}s] face is back in the picture")
+                            far_said = False
+                        if now - last_dist_sent >= 0.5:
+                            last_dist_sent = now
+                            coach.distance(face=w)
+                        if now - last_base_check >= 2.0:                          # the plugin needs a "normal distance" to compare with
+                            last_base_check = now
+                            st = coach.get_json("/distance")
+                            if st is not None and not st.get("baseline"):
+                                calib_since = calib_since or now
+                                if now - calib_since >= 3.0 and coach.post_json("/distance/calibrate", body={"face": w}) is not None:
+                                    say(f"[{now - t0:5.0f}s] no 'normal distance' yet: taking your current face size ({w:.3f}) as normal. "
+                                        "Sit normally and run --calibrate-distance to set it on purpose.")
+                                    calib_since = None
+                            else:
+                                calib_since = None
+                    elif last_face_t is not None and now - last_face_t >= a.far_after:
+                        if not far_said:
+                            say(f"[{now - t0:5.0f}s] no face for {a.far_after:.0f} s: telling the plugin you are far away / out of the picture")
+                            far_said = True
+                        if now - last_dist_sent >= 1.0:                           # stale after 5 s on the plugin side, so keep sending
+                            last_dist_sent = now
+                            coach.distance(ratio=0.3)
                 if now - last_poll >= 1.0:                                           # the chip shows the PLUGIN's clock
                     last_poll = now
                     p = coach.get_json("/pomodoro")
@@ -282,6 +322,37 @@ def selftest(a, say=print):
     return 0 if ok else 1
 
 
+def calibrate_distance(a, say=print):
+    """Tells the plugin 'this is my normal distance' from 4 s of your face size (median). Sit at your normal place first."""
+    import statistics
+    coach = CoachClient(timeout_s=1.5)
+    if not coach.health():
+        say(f"ERROR: the plugin does not answer on {coach.base}.")
+        return 1
+    feed = FakeGaze() if a.simulate else GazeFeed(a.gaze_url)
+    say("Sit at your NORMAL distance from the screen, face the camera ... measuring for 4 seconds.")
+    widths, t0 = [], time.monotonic()
+    try:
+        while time.monotonic() - t0 < 4.0:
+            if feed.connected:
+                w = face_width(feed.latest if time.monotonic() - feed.latest_at < 3.0 else None)
+                if w:
+                    widths.append(w)
+            time.sleep(0.2)
+    finally:
+        feed.stop()
+    if len(widths) < 6:
+        say("FAILED: the Gaze Tracker did not see your face (is it running, are you in front of it?). Nothing was changed.")
+        return 1
+    normal = statistics.median(widths)
+    if coach.post_json("/distance/calibrate", body={"face": normal}) is None:
+        say("FAILED: the plugin refused the value.")
+        return 1
+    say(f"OK: your normal face size is {normal:.3f} of the picture. 'Volume when far' now compares against it "
+        f"(far = {int(30)} % smaller by default, or out of the picture).")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     add_args(ap)
@@ -290,6 +361,8 @@ def main():
     a = ap.parse_args()
     if a.selftest:
         sys.exit(selftest(a, say=lambda m: print(m, flush=True)))
+    if a.calibrate_distance:
+        sys.exit(calibrate_distance(a, say=lambda m: print(m, flush=True)))
     stop = threading.Event()
     try:
         run(a, stop)

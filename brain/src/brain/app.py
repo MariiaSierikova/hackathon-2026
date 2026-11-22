@@ -21,7 +21,7 @@ sys.path.insert(0, str(HERE.parents[1]))                       # brain/src
 sys.path.insert(0, str(ROOT / "brain" / "vendor" / "logiinsight"))
 sys.path.insert(0, str(ROOT / "overlay"))
 
-from brain.monitors import blink_monitor, pace_monitor, pomodoro_monitor  # noqa: E402
+from brain.monitors import behind_monitor, blink_monitor, pace_monitor, pomodoro_monitor  # noqa: E402
 
 
 def list_devices():
@@ -51,6 +51,8 @@ def main():
     blink_monitor.add_args(ap)
     ap.add_argument("--pomodoro", action="store_true", help="Pomodoro: send desk presence from the Gaze Tracker app to the plugin (the plugin owns the clock) and show the status chip")
     pomodoro_monitor.add_args(ap)
+    ap.add_argument("--behind", action="store_true", help="look for a second person behind you with the camera's infrared stream (see --ir-device)")
+    behind_monitor.add_args(ap)
     # pace-only options (the shared ones --force/--simulate are already defined by blink_monitor.add_args)
     ap.add_argument("--mic", default=None, help="microphone number (see --list). Default: the camera microphone, else the default one")
     ap.add_argument("--fast-rate", type=float, default=None, help="syllables/s that count as too fast (default: the settings page slider)")
@@ -88,6 +90,8 @@ def main():
         threads.append(threading.Thread(target=pace_monitor.run, args=(a, stop, say_for("pace")), name="pace", daemon=True))
     if a.pomodoro:
         threads.append(threading.Thread(target=pomodoro_monitor.run, args=(a, stop, say_for("pomo")), name="pomo", daemon=True))
+    if a.behind:
+        threads.append(threading.Thread(target=behind_monitor.run, args=(a, stop, say_for("behind")), name="behind", daemon=True))
     if not threads:
         sys.exit("Nothing to run: you disabled both blink and pace.")
 
