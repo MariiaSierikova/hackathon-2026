@@ -126,6 +126,10 @@ input[type=text]{width:100%}
 .col{width:30px;height:30px;border-radius:9px;border:2px solid transparent;box-shadow:0 0 0 1px var(--line)}
 .col.sel{border-color:var(--text)}
 .inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.dclock{font:700 44px ui-monospace,Menlo,monospace;letter-spacing:-.02em}.dclock.over{color:var(--danger)}
+.dtrack{height:8px;background:var(--line);border-radius:999px;overflow:hidden;margin-top:12px}.dtrack div{height:100%;width:0;background:var(--accent);transition:width .4s}
+.dseg{transition:opacity .2s}.dseg.cur{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}.dseg.done{opacity:.5}
+.dsay{font-size:17px;line-height:1.5;margin:6px 0 10px}.dlist{margin:0 0 6px;padding-left:20px;color:var(--muted)}.dlist li{margin:3px 0}
 .thumb{max-height:70px;max-width:140px;border-radius:8px;border:1px solid var(--line)}
 .fname{color:var(--muted);font-size:12.5px}
 .rec{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--danger);animation:pulse 1s infinite}
@@ -210,6 +214,7 @@ const SVG = {
   keypad:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="9.5" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="16" y="9.5" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><rect x="9.5" y="16" width="5" height="5" rx="1"/><rect x="16" y="16" width="5" height="5" rx="1"/></svg>',
   dash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>',
   prof:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>',
+  play:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>'
 };
 const SOUNDS = [["chime","Chime"],["ping","Ping"],["knock","Soft knock"],["alert","Double beep"],["rise","Rising"],["bell","Bell"]];
@@ -424,6 +429,108 @@ async function pollFar(){
     el.textContent=parts.join(" · ");
   }catch(e){}
 }
+/* ---- Demo: a 10-minute presenter view. Works offline (served by the plugin). Every scene has a one-click fallback
+   so a missing camera or a noisy room never stops the talk. ---- */
+const DEMO=[
+ {t:0,len:45,title:"The problem",
+  say:"You work with headphones on. You stop blinking, you skip breaks, and a colleague can stand right behind you without you knowing. Desk Coach notices, locally, and nudges you through the devices you already touch.",
+  todo:["Headphones on, music playing, stand or sit at the desk."],btns:[]},
+ {t:45,len:45,title:"How it fits together",
+  say:"The camera and the microphone detect. One C# plugin inside Logi Options+ decides what is worth bothering you with. The answer goes to the MX Master 4 buzz, the MX Keypad, the Actions Ring and the screen. Nothing leaves the computer.",
+  todo:["Show the architecture slide or the dashboard."],btns:[["go-dash","Open the dashboard"]]},
+ {t:90,len:60,title:"You stay in control",
+  say:"Every feature has an on and off switch, on the keypad and here. Each one picks how it reaches you: sound, screen, mouse buzz or keypad colour, with its own cooldown so it never nags.",
+  todo:["Press a Desk Coach key on the Keypad: that widget goes grey and the switch here turns off.","Flip a switch on this page: the key changes colour.","Open Customize on one feature: four feedback types, cooldown, reset to recommended.","Press Presenting: sounds and pop-ups go silent."],btns:[["go-dash","Open the dashboard"]]},
+ {t:150,len:60,title:"Speech: pace and volume",
+  say:"Talking too fast or too quietly in a talk or a call? Local microphone analysis: a snail asks you to slow down, a duck asks you to speak up.",
+  todo:["Say one sentence slowly, then read fast for 10 seconds: snail and a calm buzz.","Speak very quietly for 5 seconds: the duck."],
+  btns:[["pace","Fallback: too fast"],["pace_ok","End snail"],["speakup","Fallback: too quiet"],["speak_ok","End duck"]]},
+ {t:210,len:45,title:"Blinking",
+  say:"People blink far less at a screen. The camera's face mesh sees it, and a gentle owl, plus one big eye across the keypad, asks you to blink.",
+  todo:["Stare without blinking for about 6 seconds: owl on screen, eye on the keypad.","Blink: it goes away."],
+  btns:[["blink","Fallback: owl now"],["blink_end","End owl"]]},
+ {t:255,len:75,title:"Pomodoro that knows you left",
+  say:"A pomodoro that counts only the time you are really at the desk. Leave for five minutes and it knows you took a break.",
+  todo:["Press 'Use 1-minute demo timer', then the Pomodoro key: the timer shows on the key and on the keypad.","Walk away: the clock pauses by itself. Come back: it continues.","At the end: break reminder and a buzz. Afterwards press 'Back to 25 / 5 / 15'."],
+  btns:[["pomo1","Use 1-minute demo timer"],["pomostart","Start timer"],["breakdue","Fallback: break reminder now"],["pomo25","Back to 25 / 5 / 15"]]},
+ {t:330,len:60,title:"Volume when far",
+  say:"Listening from the other side of the room? The sound follows how far you are, never above your cap, and gives your volume back when you return. If you turn it yourself, it stays out of your way.",
+  todo:["Play music on the speakers. Step back from the screen: the volume rises gradually.","Leave the frame for a while: the sound mutes. Come back: the old volume returns."],
+  btns:[["far_step","Fallback: step back (changes your real volume)"],["far_leave","Fallback: leave the frame"],["far_back","I am back"]]},
+ {t:390,len:120,title:"Person behind: the headline",
+  say:"With headphones on you cannot hear someone arrive. Walking past is ignored. Coming to your desk buzzes your mouse and flashes your keypad. The Actions Ring lets you answer without touching the keyboard.",
+  todo:["Headphones on, music playing.","A colleague walks past behind you: nothing happens.","A colleague walks up to your chair: the mouse buzzes, all keypad widgets show one red picture, a notification appears.","Open the Actions Ring on the mouse: Talk mode (music ducks), Hide my screen, It is fine."],
+  btns:[["behind_pass","Fallback: someone walks past"],["behind_come","Fallback: someone comes to my desk"],["ring_talk","Ring: Talk mode"],["ring_hide","Ring: Hide my screen"],["ring_back","Ring: Show my screen"],["ring_ok","Ring: It is fine"]]},
+ {t:510,len:45,title:"Brightness: needs the hardware",
+  say:"Brightness is the one feature we show as a concept. The LogiInsight camera does not report brightness or ambient light, Logitech confirmed it. So it has to be enabled in the camera hardware. With a camera that exposes it, the same engine adjusts the monitor, the keyboard backlight and the room lights.",
+  todo:["Open the locked 'Screen brightness' card.","If wanted, show a laptop camera that has brightness control."],btns:[["go-brightness","Open the brightness concept"]]},
+ {t:555,len:45,title:"What we would love from Logitech",
+  say:"Everything is local, quiet by default and built on your devices. Our wishlist: brightness from the camera, a second person detected on the camera itself, a settings panel inside Options+, haptic duration, and opening the Actions Ring or a folder from a plugin.",
+  todo:["Leave this page up for questions."],btns:[]},
+];
+const DEMO_TOTAL=600;
+const demo={run:false,at:0,t0:0,timer:null,farTimer:null,lastK:-1};
+const fmtClock=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(Math.floor(s%60)).padStart(2,"0");
+function demoIndex(){ let k=0; DEMO.forEach((s,i)=>{ if(demoElapsed()>=s.t) k=i; }); return k; }
+function demoElapsed(){ return demo.run?demo.at+(Date.now()-demo.t0)/1000:demo.at; }
+function demoPaint(){
+  const el=demoElapsed(), k=demoIndex(), c=$("#dclock"); if(!c) return;
+  c.textContent=fmtClock(Math.min(el,DEMO_TOTAL))+" / 10:00"; c.classList.toggle("over",el>DEMO_TOTAL);
+  const bar=$("#dbar"); if(bar) bar.style.width=Math.min(100,el/DEMO_TOTAL*100)+"%";
+  const seg=DEMO[k], left=Math.max(0,Math.ceil(seg.t+seg.len-el)); const n=$("#dleft"); if(n) n.textContent=el>0?"Part "+(k+1)+" of "+DEMO.length+": "+left+" s left in this part":"Press Start when you begin";
+  document.querySelectorAll(".dseg").forEach((d,i)=>{ d.classList.toggle("cur",el>0&&i===k); d.classList.toggle("done",el>0&&i<k); });
+  const b=$("#dstart"); if(b) b.textContent=demo.run?"Pause":(el>0?"Resume":"Start");
+  if(demo.run&&k!==demo.lastK){ demo.lastK=k; const cur=document.querySelector(".dseg.cur"); if(cur&&cur.scrollIntoView) cur.scrollIntoView({behavior:"smooth",block:"start"}); }
+}
+function renderDemo(){
+  const dis=remote?"":" disabled";
+  $("#main").innerHTML='<div class="top"><div class="grow"><h1>Demo</h1><p class="sub" style="margin:0">Ten minutes, in this order. Keep this page on a second screen.</p></div></div>'+
+   '<div class="sec"><div class="sh"><div><div class="dclock" id="dclock">00:00 / 10:00</div><div class="fname" id="dleft"></div></div><div class="inline" style="margin:0"><button class="btn pri" data-act="demo-start" id="dstart">Start</button><button class="btn" data-act="demo-reset">Reset</button></div></div><div class="dtrack"><div id="dbar"></div></div></div>'+
+   '<div class="sec"><div class="sh"><h2>Before you start</h2><button class="btn sm" data-act="demo-check"'+dis+'>Check everything</button></div><p class="sd">'+(remote?"Press the button: it checks the plugin, the master switch, the alert light and your volume.":"Open this page from the plugin (http://127.0.0.1:8787/) to use the demo buttons.")+'</p><div class="fname" id="dcheck" style="white-space:pre-line"></div></div>'+
+   DEMO.map((s,i)=>'<div class="sec dseg"><div class="sh"><h2>'+fmtClock(s.t)+" · "+s.title+'</h2><button class="btn sm ghost" data-act="demo-jump" data-i="'+i+'">Go to this part</button></div>'+
+     '<p class="dsay">“'+esc(s.say)+'”</p><ul class="dlist">'+s.todo.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>"+
+     (s.btns.length?'<div class="inline">'+s.btns.map(b=>'<button class="btn sm" data-act="demo-do" data-d="'+b[0]+'"'+dis+'>'+esc(b[1])+"</button>").join("")+"</div>":"")+"</div>").join("");
+  demoPaint();
+}
+function demoPost(path,body){ return fetch(path,{method:"POST",headers:JSONH,body:body?JSON.stringify(body):undefined}).catch(()=>{}); }
+function demoStopSims(){ clearInterval(demo.farTimer); demo.farTimer=null; }
+async function demoDo(name){
+  if(!remote) return; demoStopSims();
+  const trig=(trigger)=>demoPost("/trigger",{trigger,severity:1,force:true});
+  const ctrl=(trigger)=>demoPost("/trigger",{trigger,severity:1});
+  const setPomo=(w,s,l)=>{ const p=S.features.pomodoro.params; p.work=w; p.short=s; p.long=l; p.rounds=4; save(); addLog("Demo: Pomodoro "+w+" / "+s+" / "+l+" min"); };
+  switch(name){
+   case "pace": trig("pace_too_fast"); break;
+   case "pace_ok": ctrl("pace_ok"); break;
+   case "speakup": trig("speak_up"); break;
+   case "speak_ok": ctrl("speak_ok"); break;
+   case "blink": trig("blink_low"); break;
+   case "blink_end": ctrl("blink_detected"); break;
+   case "breakdue": trig("break_due"); break;
+   case "pomo1": setPomo(1,1,1); break;
+   case "pomo25": setPomo(25,5,15); break;
+   case "pomostart": S.features.pomodoro.enabled=true; pomoSwitch(true); save(); break;
+   case "far_step": { let n=0; demo.farTimer=setInterval(()=>{ n++; demoPost("/distance",{ratio:n<=9?0.5:1}); if(n>16) demoStopSims(); },1000); break; }
+   case "far_leave": demoPost("/presence",{atDesk:false}); break;
+   case "far_back": demoPost("/presence",{atDesk:true}); demoPost("/distance",{ratio:1}); break;
+   case "behind_pass": bhRun("pass"); break;
+   case "behind_come": bhRun("come"); break;
+   case "ring_talk": case "ring_hide": case "ring_back": case "ring_ok": demoPost("/behind/do/"+name.slice(5)); break;
+  }
+  addLog("Demo: <b>"+esc(name)+"</b>");
+}
+async function demoCheck(){
+  const el=$("#dcheck"); if(!el) return; const lines=[]; const ok=(c,t)=>lines.push((c?"✔ ":"✘ ")+t);
+  try{
+    const h=await (await fetch("/health")).json(); ok(h.ok,"Plugin answers (build "+h.build+")");
+    const st=await (await fetch("/settings")).json(); ok(st.master!==false,"Master switch is on"); ok(st.alertsOn!==false,"Alert light is on (alerts reach you)");
+    const d=await (await fetch("/distance")).json(); ok(d.volume!=null,"System volume readable ("+d.audio+", now "+(d.volume==null?"?":d.volume+" %")+")");
+    const f=S.features; ["speed","volume","blink","pomodoro","distance","behind"].forEach(k=>ok(f[k].enabled,F[k].name+" is switched on"));
+    const po=await (await fetch("/pomodoro")).json(); ok(!po.active||po.phase==="work","Pomodoro timer is ready");
+  }catch(e){ lines.push("✘ The plugin does not answer. Is Logi Options+ running?"); }
+  el.textContent=lines.join("\n");
+}
+
 async function connect(){
   if(!/^https?:$/.test(location.protocol)) return;
   try{
@@ -516,7 +623,7 @@ function flashKey(id){
 
 /* ============ views ============ */
 function renderSide(){
-  const nav=[["","Dashboard","dash"],["keypad","MX Keypad","keypad"],["profiles","Profiles","prof"],["settings","Devices & data","gear"]];
+  const nav=[["","Dashboard","dash"],["demo","Demo","play"],["keypad","MX Keypad","keypad"],["profiles","Profiles","prof"],["settings","Devices & data","gear"]];
   const r=ui.route.split("/")[0];
   $("#side").innerHTML='<div class="brand"><img class="px" src="'+iconSrc("blink")+'" alt="">Desk Coach</div>'+
     nav.map(n=>'<button class="nav '+((r===n[0]||(n[0]===""&&r==="f"))?"on":"")+'" data-act="go" data-to="'+n[0]+'">'+n[2].replace(/^(.*)$/,k=>SVG[k])+n[1]+"</button>").join("")+
@@ -659,11 +766,11 @@ function renderSettings(){
 /* ============ render / route ============ */
 function renderMain(){
   const sc=$("#main").scrollTop, r=ui.route.split("/");
-  if(r[0]==="f") renderDetail(r[1]); else if(r[0]==="keypad") renderKeypadPage(); else if(r[0]==="profiles") renderProfiles(); else if(r[0]==="settings") renderSettings(); else renderDash();
+  if(r[0]==="f") renderDetail(r[1]); else if(r[0]==="keypad") renderKeypadPage(); else if(r[0]==="profiles") renderProfiles(); else if(r[0]==="settings") renderSettings(); else if(r[0]==="demo") renderDemo(); else renderDash();
   $("#main").scrollTop=sc;
 }
 function renderAll(){ renderSide(); renderMain(); renderRail(); }
-function route(){ const was=ui.route; ui.route=(location.hash||"#/").replace(/^#\/?/,""); if(was==="f/distance"&&ui.route!==was) farReset(); if(was==="f/behind"&&ui.route!==was) bhStop(); $("#main").scrollTop=0; renderAll(); }
+function route(){ const was=ui.route; ui.route=(location.hash||"#/").replace(/^#\/?/,""); if(was==="f/distance"&&ui.route!==was) farReset(); if(was==="f/behind"&&ui.route!==was) bhStop(); if(was==="demo"&&ui.route!==was){ demoStopSims(); if(remote) fetch("/signal/presence/true",{method:"POST"}).catch(()=>{}); } $("#main").scrollTop=0; renderAll(); }
 addEventListener("hashchange",route);
 
 /* ============ concept feature + keypad timer ============ */
@@ -759,6 +866,11 @@ document.addEventListener("click",e=>{
       if(k==="skip") pomoNext(false);
       if(k==="reset"){ P.phase="work"; P.round=1; P.run=false; P.left=S.features.pomodoro.params.work*60; pomoPaint(); }
       break; }
+   case "demo-start": if(demo.run){ demo.at=demoElapsed(); demo.run=false; clearInterval(demo.timer); } else { demo.t0=Date.now(); demo.run=true; clearInterval(demo.timer); demo.timer=setInterval(demoPaint,500); } demoPaint(); break;
+   case "demo-reset": demo.lastK=-1; demo.run=false; demo.at=0; clearInterval(demo.timer); demoPaint(); break;
+   case "demo-jump": demo.lastK=-1; demo.at=DEMO[+t.dataset.i].t; demo.t0=Date.now(); if(!demo.run){ demo.run=true; clearInterval(demo.timer); demo.timer=setInterval(demoPaint,500); } demoPaint(); break;
+   case "demo-do": if(t.dataset.d==="go-dash") location.hash="#/"; else if(t.dataset.d==="go-brightness") location.hash="#/f/brightness"; else demoDo(t.dataset.d); break;
+   case "demo-check": demoCheck(); break;
    case "bh-sim": bhRun(t.dataset.s); break;
    case "bh-do": fetch("/behind/do/"+t.dataset.a,{method:"POST"}).then(()=>pollBehind()).catch(()=>{}); break;
    case "far-away": { ui.farAway=!ui.farAway; plugPost("/presence",{atDesk:!ui.farAway}); t.textContent=ui.farAway?"I am back":"I leave the frame"; break; }
