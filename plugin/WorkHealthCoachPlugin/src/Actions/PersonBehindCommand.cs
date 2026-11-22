@@ -24,7 +24,16 @@ namespace Loupedeck.WorkHealthCoachPlugin
         {
             PluginLog.Info($"Person-behind action: {actionParameter}");
             BehindResponse.Run(actionParameter);
-            this.ActionImageChanged();
+            this.RedrawAll();
+        }
+
+        // Several keys share this command: refresh each by name (the labels of "music" and "talk" depend on state).
+        private void RedrawAll()
+        {
+            foreach (var key in new[] { "hide", "back", "music", "talk", "ok", "snooze" })
+            {
+                this.ActionImageChanged(key);
+            }
         }
 
         protected override String GetCommandDisplayName(String actionParameter, PluginImageSize imageSize) => actionParameter switch
