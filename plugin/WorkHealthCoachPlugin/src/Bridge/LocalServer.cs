@@ -318,8 +318,51 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     return (400, "{\"error\":\"send {\\\"atDesk\\\":true|false}\"}");
                 }
 
-                PomodoroState.SetPresence(at.GetBoolean());
+                Presence.Set(at.GetBoolean());
                 return (200, Ok);
+            }
+
+            // ---- volume when far: distance without any camera code ----
+            //   POST /distance {"ratio":0.6}   face size relative to normal (1.0 = normal distance, 0.6 = 40 % smaller)
+            //   POST /distance {"face":0.11}   raw face width, needs /distance/calibrate first
+            //   POST /distance/calibrate       "this is my normal distance" (optional {"face":0.18}; default = the latest face)
+            //   GET  /distance                 state + the real system volume
+            if (path == "/distance" && method == "GET")
+            {
+                return (200, FarVolume.ToJson());
+            }
+
+            if (method == "POST" && path == "/distance")
+            {
+                using var doc = JsonDocument.Parse(body);
+                var r = doc.RootElement;
+                if (r.TryGetProperty("ratio", out var rv) && rv.TryGetDouble(out var ratio))
+                {
+                    FarVolume.SetRatio(ratio);
+                    return (200, Ok);
+                }
+
+                if (r.TryGetProperty("face", out var fv) && fv.TryGetDouble(out var face))
+                {
+                    return FarVolume.SetFace(face) ? (200, Ok) : (400, "{\"error\":\"no baseline yet: POST /distance/calibrate first\"}");
+                }
+
+                return (400, "{\"error\":\"send {\\\"ratio\\\":0.6} or {\\\"face\\\":0.11}\"}");
+            }
+
+            if (method == "POST" && path == "/distance/calibrate")
+            {
+                Double? face = null;
+                if (!String.IsNullOrWhiteSpace(body))
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("face", out var fv) && fv.TryGetDouble(out var f))
+                    {
+                        face = f;
+                    }
+                }
+
+                return FarVolume.Calibrate(face) ? (200, Ok) : (400, "{\"error\":\"no face width yet: send a sample first or pass {\\\"face\\\":0.18}\"}");
             }
 
             if (method == "POST" && path == "/trigger")
@@ -370,7 +413,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     // camera presence for the Pomodoro timer: /signal/presence/true (someone at the desk) | false
                     if (name == "presence")
                     {
-                        PomodoroState.SetPresence(on == true);
+                        Presence.Set(on == true);
                         return (200, Ok);
                     }
 

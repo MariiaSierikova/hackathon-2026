@@ -280,9 +280,11 @@ const FEATURES = [
    {g:"Detection",k:"shrink",label:"Face box shrinks by",unit:" %",min:10,max:70,step:5,def:30,help:"Compared with your normal sitting distance. Leaving the frame also counts."},
    {k:"hold",label:"Act after",unit:" s",min:.5,max:10,step:.5,def:2,help:"Avoids reacting to a quick lean back."},
    {g:"Volume",k:"boost",label:"Raise volume by",unit:" %",min:5,max:60,step:5,def:20},
+   {k:"cap",label:"Never louder than",unit:" %",min:30,max:100,step:5,def:90,help:"Safety limit for the raised volume."},
    {k:"smooth",label:"Raise gradually",type:"toggle",def:true},
    {k:"restore",label:"Restore volume when I am back",type:"toggle",def:true},
-   {g:"When I leave the camera",k:"leave",label:"Pause audio/video after",unit:" s",min:0,max:600,step:10,def:120,off0:true,help:"0 = never pause."},
+   {g:"When I leave the camera",k:"leave",label:"Stop the sound after",unit:" s",min:0,max:600,step:10,def:120,off0:true,help:"0 = never stop it."},
+   {k:"leaveAction",label:"How to stop it",type:"select",opts:["Mute the sound","Press Play/Pause"],def:"Mute the sound",help:"Mute is safe. Play/Pause is a toggle: it would START playback if nothing was playing."},
    {k:"resume",label:"Resume when I return",type:"toggle",def:true}],
   texts:[["text","Volume raised","Volume raised, you are far away"],["text2","Paused","Paused. You left the desk"]],
   cd:{def:0,min:0,max:300,note:"No cooldown by default: it follows your distance."},def:{on:true,ch:{},sound:"chime",haptic:"tap",color:"#9b6bff",effect:"steady"}},
@@ -350,6 +352,33 @@ async function pollPomo(){ if(!remote) return; try{ applyPomo(await (await fetch
 function plugPost(path,body){ return fetch(path,{method:"POST",headers:JSONH,body:body?JSON.stringify(body):undefined}).then(r=>r.json()).then(applyPomo).catch(()=>{}); }
 async function plugDeliver(id,tk,chans){ await pushNow(); const name=TRIG[id][tk==="text2"?1:0];
   for(const only of chans.filter(c=>c==="haptic"||c==="keypad")){ try{ await fetch("/trigger",{method:"POST",headers:JSONH,body:JSON.stringify({trigger:name,severity:1,force:true,only})}); }catch(e){} } }
+/* ---- volume when far: a camera-free simulator. The real detector sends the same two things:
+   POST /distance {"ratio":0.6} (face size vs normal) and /signal/presence/true|false ---- */
+function farSimHTML(){
+  const dis=remote?"":" disabled", p=S.features.distance.params;
+  return '<div class="sec"><div class="sh"><h2>Try it without the camera</h2></div><p class="sd">'+
+   (remote?"Drag the slider like moving away from the screen. This really changes your computer volume (never above "+p.cap+" %) and puts it back afterwards. Switch the feature on first.":"Open this page from the plugin (http://127.0.0.1:8787/) to try it.")+"</p>"+
+   '<div class="row"><div class="lbl"><b>Distance</b><small>Face size compared with your normal seat. 100 % = normal, 60 % = further away.</small></div><div class="ctl"><input type="range" min="20" max="110" step="5" value="'+ui.farRatio+'" data-act="farsim"'+dis+'><output id="farout">'+ui.farRatio+" %</output></div></div>"+
+   '<div class="row"><div class="lbl"><b>In the camera frame</b><small>Leave for a while to test the mute and the restore.</small></div><div class="ctl"><button class="btn" data-act="far-away"'+dis+">"+(ui.farAway?"I am back":"I leave the frame")+"</button></div></div>"+
+   '<div class="row"><div class="lbl"><b>Now</b></div><div class="ctl" style="justify-content:flex-start"><span id="farstat" class="fname">…</span></div></div>'+
+   '<p class="sd">For the camera code: <kbd>POST /distance {"ratio":0.6}</kbd> and <kbd>/signal/presence/true|false</kbd> on 127.0.0.1:8787.</p></div>';
+}
+function farSend(){ if(remote&&!ui.farAway) fetch("/distance",{method:"POST",headers:JSONH,body:JSON.stringify({ratio:ui.farRatio/100})}).catch(()=>{}); }
+function farReset(){ ui.farRatio=100; if(ui.farAway){ ui.farAway=false; if(remote) fetch("/signal/presence/true",{method:"POST"}).catch(()=>{}); } }
+addEventListener("pagehide",()=>{ if(remote&&ui.farAway) navigator.sendBeacon("/signal/presence/true"); });
+async function pollFar(){
+  if(!remote||ui.route!=="f/distance") return;
+  farSend();   // samples older than 5 s count as "no data", so keep sending while this page is open
+  try{
+    const j=await (await fetch("/distance")).json(), el=$("#farstat"); if(!el) return;
+    const parts=["System volume "+(j.volume==null?"unknown":j.volume+" %")+(j.muted?" (muted)":"")];
+    if(j.boosted) parts.push("raised, it was "+j.original+" %");
+    if(j.stopped) parts.push("sound stopped");
+    parts.push(j.enabled?"feature on":"feature OFF: switch it on at the top");
+    parts.push(j.audio);
+    el.textContent=parts.join(" · ");
+  }catch(e){}
+}
 async function connect(){
   if(!/^https?:$/.test(location.protocol)) return;
   try{
@@ -357,10 +386,10 @@ async function connect(){
     const complete=j.features&&j.features.speed&&j.features.speed.cooldown!==undefined&&j.features.pomodoro&&j.features.pomodoro.params;
     if(j.features){ S=merge(defaults(),j); lastRev=j.rev||0; applyTheme(); }
     if(!complete){ S.muted=(PROFILES[S.profile]||{}).mute||[]; await pushNow(); }
-    renderAll(); setInterval(pollState,2000); setInterval(pollPomo,1000); pollPomo();
+    renderAll(); setInterval(pollState,2000); setInterval(pollPomo,1000); setInterval(pollFar,1000); pollPomo();
   }catch(e){ remote=false; }
 }
-const ui={tab:{},route:"",rec:null,pomo:null};
+const ui={tab:{},route:"",rec:null,pomo:null,farRatio:100,farAway:false};
 const last={}; const log=[];
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -554,7 +583,7 @@ function renderDetail(id){
   $("#main").innerHTML=
    '<div class="crumb"><button data-act="go" data-to="">‹ Dashboard</button> / '+d.name+"</div>"+
    '<div class="dhead"><div class="ico"><img class="px" src="'+iconSrc(id)+'" alt=""></div><div class="grow"><h1>'+d.name+'</h1><p class="sub" style="margin:0">'+d.blurb+"</p></div>"+toggleSw(f.enabled,"toggle",'data-id="'+id+'"')+"</div>"+
-   (id==="pomodoro"?pomoHTML():"")+
+   (id==="pomodoro"?pomoHTML():"")+(id==="distance"?farSimHTML():"")+
    '<div class="sec"><div class="sh"><h2>When it triggers</h2><button class="btn sm ghost" data-act="reset-params" data-id="'+id+'">Reset to recommended</button></div>'+d.params.map(p=>paramRow(d,f,p)).join("")+"</div>"+
    '<div class="sec"><div class="sh"><h2>How you are notified</h2><button class="btn sm ghost" data-act="reset-fb" data-id="'+id+'">Reset to recommended</button></div>'+
    '<p class="sd">Pick one or more. Each type has its own settings below.</p>'+
@@ -589,7 +618,7 @@ function renderMain(){
   $("#main").scrollTop=sc;
 }
 function renderAll(){ renderSide(); renderMain(); renderRail(); }
-function route(){ ui.route=(location.hash||"#/").replace(/^#\/?/,""); $("#main").scrollTop=0; renderAll(); }
+function route(){ const was=ui.route; ui.route=(location.hash||"#/").replace(/^#\/?/,""); if(was==="f/distance"&&ui.route!==was) farReset(); $("#main").scrollTop=0; renderAll(); }
 addEventListener("hashchange",route);
 
 /* ============ concept feature + keypad timer ============ */
@@ -685,6 +714,7 @@ document.addEventListener("click",e=>{
       if(k==="skip") pomoNext(false);
       if(k==="reset"){ P.phase="work"; P.round=1; P.run=false; P.left=S.features.pomodoro.params.work*60; pomoPaint(); }
       break; }
+   case "far-away": { ui.farAway=!ui.farAway; plugPost("/presence",{atDesk:!ui.farAway}); t.textContent=ui.farAway?"I am back":"I leave the frame"; break; }
    case "export": { const b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"}), u=URL.createObjectURL(b), l=document.createElement("a"); l.href=u; l.download="desk-coach-settings.json"; l.click(); setTimeout(()=>URL.revokeObjectURL(u),1000); break; }
    case "wipe": if(confirm("Reset all Desk Coach settings?")){ S=defaults(); save(); renderAll(); } break;
   }
@@ -696,6 +726,7 @@ document.addEventListener("input",e=>{
   if(a==="fbnum"){ f.fb[t.dataset.c][t.dataset.k]=+t.value; t.nextElementSibling.textContent=t.value+t.dataset.unit; save(); }
   if(a==="fbtext"){ f.fb.screen.texts[t.dataset.k]=t.value; save(); }
   if(a==="colorin"){ f.fb.keypad.color=t.value; save(); }
+  if(a==="farsim"){ ui.farRatio=+t.value; const o=$("#farout"); if(o) o.textContent=t.value+" %"; farSend(); }
 });
 document.addEventListener("change",e=>{
   const t=e.target, a=t.dataset.act; if(!a) return; const id=t.dataset.id, f=id&&S.features[id];

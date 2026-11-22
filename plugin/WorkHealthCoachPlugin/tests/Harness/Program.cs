@@ -51,10 +51,11 @@ if (args.Length >= 1 && args[0] == "--serve")
     UiSettings.Init();
     NotificationPolicy.Decided += d => Console.WriteLine($"decision: {d.Message.Trigger} haptic={d.Haptic} keypad={d.Visual} screen={d.Overlay} pattern={d.Rule?.HapticPattern}");
     TriggerBus.Received += m => { if (m.Trigger is not ("blink_detected" or "pace_ok")) { NotificationPolicy.Evaluate(m); } };
+    FarVolume.Audio = new FakeAudio { Volume = 40, Log = true };   // never the real volume
     var srv = new LocalServer();
     srv.Start();
     var ticker = new System.Timers.Timer(1000) { AutoReset = true };
-    ticker.Elapsed += (_, _) => { SessionState.Tick(); PomodoroState.Tick(); };
+    ticker.Elapsed += (_, _) => { SessionState.Tick(); PomodoroState.Tick(); FarVolume.Tick(); };
     ticker.Start();
     Console.WriteLine($"serving http://127.0.0.1:{LocalServer.Port}/  (data in {tmp})");
     await Task.Delay(TimeSpan.FromSeconds(args.Length > 1 ? Int32.Parse(args[1]) : 600));
@@ -231,10 +232,168 @@ Check("stop switches the feature off", !PomodoroState.Active && !UiSettings.Feat
 await Send("POST", "/pomodoro/start");
 Check("start switches the feature on", PomodoroState.Active && UiSettings.FeatureEnabled("pomodoro"));
 
+Console.WriteLine("Volume when far (fake sound device + fake clock, no camera)");
+var audio = new FakeAudio { Volume = 40 };
+var fclock = DateTime.UtcNow;
+var media = 0;
+var farTriggers = 0;
+FarVolume.Audio = audio;
+FarVolume.Now = () => fclock;
+FarVolume.SendPlayPause = () => media++;
+TriggerBus.Received += m => { if (m.Trigger == "volume_far") { farTriggers++; } };
+void Step(Int32 sec) { for (var i = 0; i < sec; i++) { fclock = fclock.AddSeconds(1); FarVolume.Tick(1); } }
+void Hold(Double ratio, Int32 sec) { for (var i = 0; i < sec; i++) { FarVolume.SetRatio(ratio); Step(1); } }
+void Cfg(Boolean smooth = false, Boolean restore = true, Int32 leave = 120, Boolean resume = true, Boolean key = false, Int32 cap = 90, Int32 boost = 20) =>
+    FarVolume.Configure(true, 30, 2, boost, cap, smooth, restore, leave, resume, key);
+
+FarVolume.Configure(false, 30, 2, 20, 90, false, true, 120, true, false);
+FarVolume.SetPresence(true);
+Hold(0.4, 6);
+Check("feature off: nothing changes", audio.Volume == 40 && audio.Sets == 0);
+
+Cfg();
+Hold(1.0, 3);
+Check("near the screen: no change", audio.Volume == 40);
+Hold(0.6, 1);
+Check("far, but not for 2 s yet: no change", audio.Volume == 40);
+Hold(0.6, 2);
+Check("far for 2 s: volume 40 -> 60 and one volume_far trigger", audio.Volume == 60 && farTriggers == 1 && FarVolume.Boosted, $"vol={audio.Volume} triggers={farTriggers}");
+Hold(1.0, 3);
+Check("back near: volume restored to 40", audio.Volume == 40 && !FarVolume.Boosted, $"vol={audio.Volume}");
+
+audio.Volume = 85; farTriggers = 0;
+Hold(0.5, 4);
+Check("never above the cap (85 + 20 -> 90)", audio.Volume == 90);
+Hold(1.0, 4);
+Check("restored to 85", audio.Volume == 85);
+audio.Volume = 95; farTriggers = 0;
+Hold(0.5, 4);
+Check("already above the cap: never lowered, no raise", audio.Volume == 95 && farTriggers == 0);
+Hold(1.0, 4);
+
+Cfg(smooth: true);
+audio.Volume = 40; audio.MaxJump = 0;
+Hold(0.5, 3);
+Check("smooth: first step only +5", audio.Volume == 45, $"vol={audio.Volume}");
+Hold(0.5, 4);
+Check("smooth: reaches 60 in small steps", audio.Volume == 60 && audio.MaxJump <= 5, $"vol={audio.Volume} maxJump={audio.MaxJump}");
+Hold(1.0, 12);
+Check("smooth: restores to 40 in small steps", audio.Volume == 40 && audio.MaxJump <= 5, $"vol={audio.Volume} maxJump={audio.MaxJump}");
+
+Cfg();
+audio.Volume = 40;
+Hold(0.5, 3);
+audio.Volume = 30;   // the user turns it down by hand
+Hold(0.5, 4);
+Check("user changed the volume: we do not fight them", audio.Volume == 30 && !FarVolume.Boosted, $"vol={audio.Volume}");
+Hold(1.0, 3);
+Hold(0.5, 3);
+Check("later far again: boosts from the new volume", audio.Volume == 50, $"vol={audio.Volume}");
+Hold(1.0, 3);
+Check("and restores to the user's 30", audio.Volume == 30);
+
+Cfg();
+audio.Volume = 40; audio.Muted = false;
+FarVolume.SetPresence(false);
+Step(3);
+Check("out of the frame counts as far: volume raised", audio.Volume == 60, $"vol={audio.Volume}");
+Step(100);
+Check("away less than 120 s: not muted", audio.Muted == false);
+Step(21);
+Check("away 120 s: sound muted", audio.Muted == true && FarVolume.Stopped);
+FarVolume.SetPresence(true);
+Step(4);
+Check("back: unmuted and volume restored", audio.Muted == false && audio.Volume == 40 && !FarVolume.Stopped, $"muted={audio.Muted} vol={audio.Volume}");
+
+audio.Muted = true;
+FarVolume.SetPresence(false);
+Step(125);
+FarVolume.SetPresence(true);
+Step(4);
+Check("user had it muted: stays muted", audio.Muted == true);
+audio.Muted = false;
+
+media = 0;
+Cfg(leave: 10, key: true);
+FarVolume.SetPresence(false);
+Step(12);
+Check("Play/Pause mode: pressed once after 10 s away", media == 1 && audio.Muted == false);
+FarVolume.SetPresence(true);
+Step(4);
+Check("Play/Pause mode: pressed again on return", media == 2);
+Cfg(leave: 10, key: true, resume: false);
+FarVolume.SetPresence(false);
+Step(12);
+FarVolume.SetPresence(true);
+Step(4);
+Check("resume off: no second press", media == 3);
+
+Cfg();
+audio.Volume = 40; audio.Muted = false;
+FarVolume.SetPresence(false);
+Step(125);
+FarVolume.Configure(false, 30, 2, 20, 90, false, true, 120, true, false);
+Check("switching the feature off gives sound and volume back", audio.Muted == false && audio.Volume == 40, $"muted={audio.Muted} vol={audio.Volume}");
+FarVolume.SetPresence(true);
+
+Cfg();
+audio.Volume = null;
+Hold(0.4, 6);
+var setsBefore = audio.Sets;
+Hold(0.4, 6);
+Check("no readable volume: no crash, nothing set", audio.Sets == setsBefore);
+audio.Volume = 40;
+FarVolume.SetPresence(false); FarVolume.SetPresence(true);
+Step(12);
+
+Cfg();
+audio.Volume = 40;
+FarVolume.SetRatio(0.5);
+Step(12);
+Check("no fresh distance samples: not treated as far for ever", audio.Volume == 40 && !FarVolume.Boosted, $"vol={audio.Volume}");
+
+Console.WriteLine("Volume when far: API and settings page mapping");
+Check("calibrate with no data -> 400", (await Send("POST", "/distance/calibrate")).code == 400);
+Check("face before calibration -> 400", (await Send("POST", "/distance", "{\"face\":0.09}")).code == 400);
+Check("calibrate from the latest face", (await Send("POST", "/distance/calibrate")).code == 200);
+Check("face 0.045 vs baseline 0.09 -> ratio 0.5", (await Send("POST", "/distance", "{\"face\":0.045}")).code == 200 && (await Send("GET", "/distance")).body is var gj && gj.Contains("\"ratio\":0.5") && gj.Contains("\"baseline\":0.09"));
+Check("ratio accepted", (await Send("POST", "/distance", "{\"ratio\":0.8}")).code == 200);
+Check("bad body -> 400", (await Send("POST", "/distance", "{\"nope\":1}")).code == 400);
+Check("not json -> 400", (await Send("POST", "/distance", "hello")).code == 400);
+Check("GET /distance shows the (fake) system volume", (await Send("GET", "/distance")).body.Contains($"\"volume\":{audio.Volume}"));
+await Send("POST", "/presence", "{\"atDesk\":false}");
+Check("presence reaches the volume engine", !FarVolume.AtDesk);
+await Send("GET", "/signal/presence/true");
+Check("signal/presence too", FarVolume.AtDesk);
+
+const String farState = """
+{"master":true,"profile":"everyday","muted":[],"features":{"distance":{"enabled":true,"cooldown":0,"params":{"shrink":40,"hold":3,"boost":15,"cap":80,"smooth":false,"restore":true,"leave":60,"resume":true,"leaveAction":"Press Play/Pause"}}}}
+""";
+Check("state accepted", (await Send("POST", "/ui-state", farState)).code == 200);
+Check("page settings reach the engine", FarVolume.Enabled && FarVolume.ShrinkPct == 40 && FarVolume.HoldSec == 3 && FarVolume.BoostPct == 15 && FarVolume.CapPct == 80 && FarVolume.LeaveSec == 60 && FarVolume.UsePlayPause && !FarVolume.Smooth);
+UiSettings.SetMaster(false);
+Check("master off switches the feature off", !FarVolume.Enabled);
+UiSettings.SetMaster(true);
+Check("master on switches it back on", FarVolume.Enabled);
+UiSettings.SetFeatureEnabled("distance", false);
+Check("feature key off", !FarVolume.Enabled);
+
+if (OperatingSystem.IsMacOS())
+{
+    Console.WriteLine("Volume when far: real macOS volume (read-only; sets the SAME value back, never changes loudness or mute)");
+    var real = new MacAudio();
+    var rv = real.GetVolume();
+    Check("reads the system volume", rv is >= 0 and <= 100, $"{rv}");
+    Check("reads the mute state", real.GetMuted() != null);
+    Check("setting the same volume works and changes nothing", rv.HasValue && real.SetVolume(rv.Value) && real.GetVolume() == rv);
+}
+
+FarVolume.Audio = new NoAudio();
+
 Console.WriteLine("Persistence");
 var before = UiSettings.ToJson();
 UiSettings.Init();
-Check("state survives a reload", JsonDocument.Parse(UiSettings.ToJson()).RootElement.GetProperty("features").GetProperty("speed").GetProperty("cooldown").GetInt32() == 30);
+Check("state survives a reload", JsonDocument.Parse(UiSettings.ToJson()).RootElement.GetProperty("features").GetProperty("distance").GetProperty("params").GetProperty("cap").GetInt32() == 80);
 
 Console.WriteLine("Keypad drawing (needs the real PluginApi.dll; skipped if it cannot load)");
 try
@@ -298,4 +457,26 @@ async Task<Boolean> EnablePomodoro(Boolean on)
 {
     var r = await Send("POST", "/ui-state", state.Replace("\"pomodoro\":{\"enabled\":false", $"\"pomodoro\":{{\"enabled\":{(on ? "true" : "false")}"));
     return r.code == 200;
+}
+
+// A sound device that records what the engine does.
+class FakeAudio : ISystemAudio
+{
+    public String Name => "fake";
+    public Int32? Volume { get; set; }
+    public Boolean? Muted { get; set; } = false;
+    public Int32 Sets { get; private set; }
+    public Int32 MaxJump { get; set; }
+    public Boolean Log { get; set; }
+    public Int32? GetVolume() => Volume;
+    public Boolean? GetMuted() => Muted;
+    public Boolean SetVolume(Int32 percent)
+    {
+        if (Volume.HasValue) { MaxJump = Math.Max(MaxJump, Math.Abs(percent - Volume.Value)); }
+        Volume = percent;
+        Sets++;
+        if (Log) { Console.WriteLine($"fake audio: volume -> {percent}"); }
+        return true;
+    }
+    public Boolean SetMuted(Boolean muted) { Muted = muted; if (Log) { Console.WriteLine($"fake audio: muted -> {muted}"); } return true; }
 }

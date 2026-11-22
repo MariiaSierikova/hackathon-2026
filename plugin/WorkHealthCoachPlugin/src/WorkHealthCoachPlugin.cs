@@ -31,6 +31,8 @@ namespace Loupedeck.WorkHealthCoachPlugin
             HapticPlayer.Init(this);
 
             // Haptics subscribe to triggers. Keypad widgets and the notification policy plug in here later.
+            FarVolume.Audio = SystemAudio.Create();
+            FarVolume.SendPlayPause = () => this.ClientApplication.SendKeyboardShortcut(VirtualKeyCode.MediaPlayPause, ModifierKey.None);
             NotificationPolicy.Init();
             UiSettings.Init();
             TriggerBus.Received += OnRaw;                              // raw trigger -> (controls) or policy
@@ -42,6 +44,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
             {
                 SessionState.Tick();
                 PomodoroState.Tick();
+                FarVolume.Tick();
             };
             this._tick.Start();
         }
@@ -90,6 +93,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
             TriggerBus.Received -= OnRaw;
             NotificationPolicy.Decided -= OnDecided;
             this._tick?.Stop();
+            FarVolume.Release();   // never leave the user's sound muted or raised
             this._server.Stop();
         }
     }

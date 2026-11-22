@@ -18,7 +18,7 @@ The page stores one JSON document (`ui-state.json`, next to `settings.json`) thr
 | Speech volume | `speak_up` (team's detector + duck), `speak_down` (new) | same |
 | Eye blinking | `blink_low` | same |
 | Pomodoro | `break_due` (team's Python timer sends it; the plugin timer can too), `break_over` (new) | same + the timer settings below |
-| Volume when far | `volume_far` (new) | same (no default feedback; the volume change is the app's job) |
+| Volume when far | `volume_far` (new) | same (no feedback by default); the plugin itself changes the volume, see below |
 | Person behind | `person_behind` | same |
 
 Also mapped: master switch (`PolicySettings.Master`), profile and its muted channels (`Muted`). `MinSeverity`, `HapticAfterSec` (escalation), budget, presets, snooze are unchanged and still apply.
@@ -48,6 +48,18 @@ cd plugin/WorkHealthCoachPlugin/tests/Harness && ./run.sh       # 60 checks, thr
 dotnet build -c Release -p:LinkPlugin=false                      # compile in src/ without linking into Options+
 ```
 `WORKHEALTH_DATA_DIR` overrides the settings folder and `WORKHEALTH_PORT` the server port (default 8787). The harness uses its own port (18787) and refuses to run on 8787, so it can never touch the plugin running inside Options+.
+
+## Volume when far (no camera needed to build or test)
+`Session/FarVolume.cs` + `Audio/SystemAudio.cs`. The plugin raises the computer's volume when you are far from the screen, and mutes it when you have left.
+- **Far** = the face is clearly smaller than at your normal seat (ratio <= 1 - shrink %, default 30 %) **or** you are out of the frame, for at least "Act after" (2 s).
+- **Far ->** volume +20 % points (gradually, 5 points a second), never above "Never louder than" (default 90 %). One `volume_far` trigger fires (no feedback by default).
+- **Near again ->** the previous volume comes back. If you turned the volume by hand in between, it leaves your setting alone and will not raise it again until you have been near.
+- **Out of the frame for 120 s ->** mute (default) or press Play/Pause; coming back undoes it. Play/Pause is a toggle and would START playback if nothing was playing, so mute is the default. If you had it muted already it stays muted.
+- Feature off, master off or plugin unload: sound and volume are given back.
+- **Inputs (any detector, or the page's simulator):** `POST /distance {"ratio":0.6}` (face size vs normal; stale after 5 s, so keep sending) or `{"face":0.11}` after `POST /distance/calibrate` ("this is my normal distance", optional `{"face":0.18}`), plus presence `/signal/presence/true|false` (shared with Pomodoro). `GET /distance` returns the state and the real system volume.
+- **Try it:** Customize -> "Try it without the camera" (slider and "I leave the frame"). It really changes your volume; leaving the page puts presence back.
+- **Systems:** macOS via `osascript` (tested: read and set-same-value on a real Mac). Windows via Core Audio (`IAudioEndpointVolume`): written from the documented interface, compiles, **not run on Windows yet**. Other systems do nothing.
+- The camera side only needs to send the face width (or the ratio) and "face seen / not seen". Nothing here opens the camera.
 
 ## How the Python detectors fit (integration, 2026-11-22)
 - **One Pomodoro clock: the plugin's.** `pomodoro_monitor.py` now only sends presence (`/signal/presence/true|false`); `--own-timer` is the old
