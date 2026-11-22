@@ -1,6 +1,7 @@
 namespace Loupedeck.WorkHealthCoachPlugin
 {
     using System;
+    using System.Collections.Generic;
 
     // One Options+ action per coaching feature (plus Master and Presenting mode). Drag them onto MX Keypad keys:
     // a press switches the feature on or off, and the key shows its pixel icon (dimmed when off).
@@ -35,6 +36,17 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
         // Every key of this command is a "variation" (a parameter). The Logitech docs say ActionImageChanged() without a
         // parameter is for actions that have none; with parameters, say WHICH variation changed.
+        // The cell (row, col) of the 3x3 alert picture that each key draws. Arrange the nine keys on the Keypad in this order:
+        //   speed     volume    blink
+        //   pomodoro  distance  behind
+        //   master    present   alert
+        public static readonly Dictionary<String, (Int32 Row, Int32 Col)> Cells = new()
+        {
+            ["speed"] = (0, 0), ["volume"] = (0, 1), ["blink"] = (0, 2),
+            ["pomodoro"] = (1, 0), ["distance"] = (1, 1), ["behind"] = (1, 2),
+            ["master"] = (2, 0), ["present"] = (2, 1), ["alert"] = (2, 2),
+        };
+
         public static readonly String[] AllKeys = { "speed", "volume", "blink", "pomodoro", "distance", "behind", "master", "present", "alert" };
 
         private System.Timers.Timer _blinker;
@@ -118,7 +130,8 @@ namespace Loupedeck.WorkHealthCoachPlugin
             _ => UiSettings.Master && UiSettings.FeatureEnabled(id),
         };
 
-        protected override String GetCommandDisplayName(String actionParameter, PluginImageSize imageSize) => String.Empty;
+        // Normally no text on the key. During an alert a blank space overrides the key's default name, so it does not write over the picture.
+        protected override String GetCommandDisplayName(String actionParameter, PluginImageSize imageSize) => SessionState.TakeoverActive ? " " : String.Empty;
 
         protected override BitmapImage GetCommandImage(String actionParameter, PluginImageSize imageSize)
         {
@@ -131,7 +144,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 }
 
                 var px = Render.Px(imageSize);
-                var alertImage = KeypadScreen.AlertKey(px);
+                var alertImage = Cells.TryGetValue(actionParameter, out var cell) ? KeypadScreen.AlertTile(cell.Row, cell.Col, px) : null;
                 this._wasAlert = alertImage != null;
                 if (alertImage != null)
                 {

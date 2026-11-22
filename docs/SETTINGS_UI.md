@@ -33,9 +33,17 @@ The page offers four patterns per feature. Events and waveforms (`package/events
 - Keys change the same document as the page, so page, keys and policy stay in sync (the page polls every 2 s).
   Each key is redrawn **by name** (`ActionImageChanged(key)`: the Logitech docs say the no-argument call is for actions without parameters), so a press or a page switch changes only that key. The Pomodoro key alone is redrawn every second for the countdown. Master off greys every feature key on purpose (everything is paused); Presenting greys the features that profile switches off.
   Debugging: every key press (`Desk Coach key pressed: 'speed'`) and every image request (`Desk Coach key image: 'speed' ON 80px`, verbose) is in the plugin log.
-- **Alerts on the widget keys (no Coach screen folder needed):** while an alert is active (person behind, break time, speak up, blink, slow down, time), EVERY "Desk Coach" key
-  (the feature toggles and the new **Alert light** action) flashes the same alert and goes back to its icon afterwards. A key press during an alert dismisses it (it does not
-  flip the feature). The keys do not know where they sit, so each draws the whole short message instead of one tile of a 3x3 picture. The Coach screen folder still shows the big picture.
+- **Alerts on the widget keys (no Coach screen folder needed):** while an alert is active (person behind, break time, speak up, blink, slow down, time) the Desk Coach keys
+  together draw ONE picture, the same scene the Coach screen folder shows. A key does not know where it sits, so each widget has a fixed cell; put the nine keys in this order:
+
+  | | column 1 | column 2 | column 3 |
+  |---|---|---|---|
+  | row 1 | Speech speed | Speech volume | Eye blinking |
+  | row 2 | Pomodoro | Volume when far | Person behind |
+  | row 3 | Master switch | Presenting mode | **Alert light** |
+
+  In any other order the picture is scrambled (cells: `FeatureToggleCommand.Cells`). A key press during an alert dismisses it. The tiles are cut from one snapshot (150 ms) so the flashing
+  stays in step. While an alert shows, the key's name text is replaced by a blank space (Options+ otherwise writes the name over the picture; not verified on the real Keypad).
 - **New reminders** take over the whole Keypad like the eye and snail do: SPEAK UP, LOWER VOICE, BREAK TIME (green), BACK TO FOCUS, VOLUME UP. Colour comes from the page's Keypad colour (image upload is stored but not drawn yet).
 - **Pomodoro timer** in the Coach screen folder (same layout as the idle screen): top = FOCUS 1 OF 4 + AT DESK / AWAY / PAUSED / REST, middle = huge MM:SS, bottom = reset / play-pause / skip. Limit from the handoff: a folder cannot be opened by code, so the user presses the Coach screen key once; the Pomodoro feature key shows the countdown without opening anything.
 
