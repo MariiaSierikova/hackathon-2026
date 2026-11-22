@@ -22,6 +22,16 @@ Looking down at a phone usually makes the Gaze Tracker lose your face completely
 4. `cd brain && uv run python src/brain/app.py --no-blink --no-pace --pomodoro` (chip in the top-right corner: green WORK, grey PAUSED, blue BREAK).
    Without the launcher: `uv run python src/brain/monitors/pomodoro_monitor.py` (no chip). `--simulate` = scripted fake person, no hardware, 80 s.
 
+## Quick checks (do these before a long test)
+- **15-second self-test, no camera, no Gaze Tracker:** `uv run python src/brain/monitors/pomodoro_monitor.py --selftest`
+  It checks that the plugin answers, Pomodoro is on, the timer runs, and that presence true/false starts/stops the clock.
+  FAIL messages say what to do (switch Pomodoro on, press play, wrong port ...).
+- **Short thresholds for a human test:** `app.py --no-blink --no-pace --pomodoro --absent-pause 4 --lookaway-pause 6 --status-every 2`
+  (instead of 30 s / 60 s / 10 s). Look away for ~8 s instead of 40 s.
+- **On the page** set the focus time to 5 min (the minimum) and "Reset the timer if away for" to 1 min; "Demo: skip ahead" jumps over the away time.
+- **Status line** `[running=... counting=... plugin-sees-desk=...]`: `running=False` = the plugin's timer is paused (chip: TIMER PAUSED, press play);
+  `plugin-sees-desk=False` while the camera says "at desk" = the presence signal does not reach the plugin.
+
 ## Old mode
 `--own-timer`: the Python program keeps its own clock (`--work-min`, `--break-min`) and sends `break_due` every 2 s until you take a break.
 Only use it with the plugin's Pomodoro **switched off** in the plugin, otherwise you get two clocks and double reminders.

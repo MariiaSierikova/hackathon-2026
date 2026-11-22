@@ -89,6 +89,16 @@ class CoachClient:
             self.last_error = e
             return None
 
+    def post_json(self, path, timeout_s=1.0):
+        """Blocking POST with an empty body. Returns the JSON answer, or None if the plugin does not answer."""
+        try:
+            req = urllib.request.Request(self.base + path, data=b"", method="POST", headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout_s) as r:
+                return json.loads(r.read() or b"{}")
+        except Exception as e:
+            self.last_error = e
+            return None
+
     def health(self):
         """True if the plugin answers (blocking, <= timeout). The answer also names the plugin build."""
         try:
