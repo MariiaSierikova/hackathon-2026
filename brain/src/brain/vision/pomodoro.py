@@ -31,7 +31,7 @@ class PomodoroTracker:
         self.break_taken = False     # True for one update() after a due break was actually taken
 
     def update(self, now, present, focused):
-        """present: a face is seen. focused: eyes on the screen (only meaningful if present). Returns the state."""
+        """present: a face is seen. focused: eyes on the screen (True / False; None = unknown, e.g. an unreliable gaze frame). Returns the state."""
         dt = 0.0 if self._last is None else max(0.0, min(now - self._last, 5.0))   # cap: a stalled loop must not jump the clock
         self._last = now
         self.break_taken = False
@@ -41,7 +41,8 @@ class PomodoroTracker:
             self._unfocused = 0.0
         else:
             self._absent = 0.0
-            self._unfocused = 0.0 if focused else self._unfocused + dt
+            if focused is not None:                 # None = no reliable gaze this time: says nothing, the counter stays
+                self._unfocused = 0.0 if focused else self._unfocused + dt
 
         away = self._absent if not present else 0.0
         # a real break: away long enough -> restart

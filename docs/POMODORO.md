@@ -45,3 +45,10 @@ Only use it with the plugin's Pomodoro **switched off** in the plugin, otherwise
 - The new presence-only path on the real Windows machine (plugin clock + real Gaze Tracker): only run in simulation so far.
 - The Gaze Tracker next to the LogiInsight camera AI running at the same time.
 - Thresholds (30 s / 60 s) were chosen from one look-away test.
+
+## Gaze is unreliable or drifts ("face yes | gaze off screen" for a minute while you sit there)
+- The status line shows the real gaze: `gaze off screen (2495,14 geom)`. Frames from the Gaze Tracker's `calibrated_legacy_fallback` model (junk coordinates, e.g. x = -321) now count as
+  *unknown*, not as "looking away"; a gaze point up to 15 % beyond the screen edge still counts as the screen (`--focus-margin`).
+- If the gaze is still off the screen while you look at it: quit ALL Gaze Tracker processes (`taskkill /F /IM "Gaze Tracker.exe"`), start it once, and recalibrate from your normal seat
+  (Controls -> Add points). Calibration is tied to where you sit.
+- Escape hatch: `--no-focus` ignores the gaze completely (only a missing face counts as away).
