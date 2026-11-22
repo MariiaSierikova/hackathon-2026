@@ -53,14 +53,19 @@ def main():
     pomodoro_monitor.add_args(ap)
     # pace-only options (the shared ones --force/--simulate are already defined by blink_monitor.add_args)
     ap.add_argument("--mic", default=None, help="microphone number (see --list). Default: the camera microphone, else the default one")
-    ap.add_argument("--fast-rate", type=float, default=pace_monitor.RATE_THRESHOLD, help="syllables/s that count as too fast")
-    ap.add_argument("--quiet-db", type=float, default=-25.0, help="speech level (dBFS) below which you are too quiet -> duck")
-    ap.add_argument("--ok-db", type=float, default=-22.0, help="back above this = loud enough again")
-    ap.add_argument("--ok-rate", type=float, default=pace_monitor.RATE_RESET, help="back below this = pace fine again")
+    ap.add_argument("--fast-rate", type=float, default=None, help="syllables/s that count as too fast (default: the settings page slider)")
+    ap.add_argument("--quiet-db", type=float, default=None, help="speech level (dBFS) below which you are too quiet -> duck (default: the settings page slider)")
+    ap.add_argument("--ok-db", type=float, default=None, help="back above this = loud enough again (default: 3 dB above the quiet limit)")
+    ap.add_argument("--ok-rate", type=float, default=None, help="back below this = pace fine again (default: 0.7 below the fast limit)")
+    ap.add_argument("--calibrate-volume", action="store_true", help="speak normally for 10 s: sets the settings page's Volume floor slider 10 dB below your level, then exits")
     a = ap.parse_args()
 
     if a.list:
         list_devices()
+        return
+
+    if a.calibrate_volume:
+        pace_monitor.run(a, threading.Event(), print)
         return
 
     if not a.simulate and not a.no_blink and a.device is None:
