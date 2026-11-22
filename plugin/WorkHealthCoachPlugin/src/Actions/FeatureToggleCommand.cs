@@ -24,6 +24,10 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public FeatureToggleCommand()
             : base()
         {
+            // Icon-only key (Logitech docs, "Display Modes"): without IsWidget Options+ reserves a text-label strip under the image, so the
+            // picture does not fill the key and the nine alert tiles cannot line up. As a widget the image covers the whole key.
+            this.IsWidget = true;
+
             foreach (var (id, name) in Features)
             {
                 this.AddParameter(id, name, Group);
