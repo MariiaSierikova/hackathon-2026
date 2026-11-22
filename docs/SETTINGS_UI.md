@@ -43,7 +43,7 @@ The page offers four patterns per feature. Events and waveforms (`package/events
   | row 3 | Master switch | Presenting mode | **Alert light** |
 
   In any other order the picture is scrambled (cells: `FeatureToggleCommand.Cells`). A key press during an alert dismisses it. The tiles are cut from one snapshot (150 ms) so the flashing
-  stays in step. While an alert shows, the key's name text is replaced by a blank space (Options+ otherwise writes the name over the picture; not verified on the real Keypad).
+  stays in step. The widget command sets `IsWidget = true` (Logitech docs, "Display Modes"): without it Options+ reserves a text-label strip under the image and the tiles do not line up. While an alert shows, the key's name text is replaced by a blank space (Options+ otherwise writes the name over the picture; not verified on the real Keypad).
 - **New reminders** take over the whole Keypad like the eye and snail do: SPEAK UP, LOWER VOICE, BREAK TIME (green), BACK TO FOCUS, VOLUME UP. Colour comes from the page's Keypad colour (image upload is stored but not drawn yet).
 - **Pomodoro timer** in the Coach screen folder (same layout as the idle screen): top = FOCUS 1 OF 4 + AT DESK / AWAY / PAUSED / REST, middle = huge MM:SS, bottom = reset / play-pause / skip. Limit from the handoff: a folder cannot be opened by code, so the user presses the Coach screen key once; the Pomodoro feature key shows the countdown without opening anything.
 
