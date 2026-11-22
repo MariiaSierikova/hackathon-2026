@@ -283,6 +283,13 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     }
 
                     rule.Enabled = Bool(f["enabled"], rule.Enabled);
+
+                    // The plugin's Pomodoro timer sends break_due / break_over ONCE per phase, so the mouse must buzz on the first
+                    // message (an existing settings.json may still carry the old "mouse after 5 s" escalation for break_due).
+                    if (t is "break_due" or "break_over")
+                    {
+                        rule.HapticAfterSec = 0;
+                    }
                     if (f["cooldown"] != null)
                     {
                         rule.CooldownSec = Math.Max(0, Int(f["cooldown"], rule.CooldownSec));

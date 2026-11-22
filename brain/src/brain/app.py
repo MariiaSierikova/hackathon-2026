@@ -49,7 +49,7 @@ def main():
     ap.add_argument("--no-pace", action="store_true", help="do not watch speech pace (no microphone)")
     ap.add_argument("--no-overlay", action="store_true", help="do not show the on-screen owl/snail")
     blink_monitor.add_args(ap)
-    ap.add_argument("--pomodoro", action="store_true", help="run the Pomodoro timer (needs the Gaze Tracker app) and show its status chip")
+    ap.add_argument("--pomodoro", action="store_true", help="Pomodoro: send desk presence from the Gaze Tracker app to the plugin (the plugin owns the clock) and show the status chip")
     pomodoro_monitor.add_args(ap)
     # pace-only options (the shared ones --force/--simulate are already defined by blink_monitor.add_args)
     ap.add_argument("--mic", default=None, help="microphone number (see --list). Default: the camera microphone, else the default one")

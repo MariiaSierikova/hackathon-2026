@@ -253,6 +253,41 @@ catch (Exception ex)
     Console.WriteLine($"  skip  keypad drawing: {ex.GetType().Name}: {ex.Message}");
 }
 
+Console.WriteLine("Detector features through the settings (duck, snail, owl, control signals)");
+UiSettings.ApplyProfile("everyday");
+// NOTE: runs last on purpose: the future timestamps below move the policy's per-trigger clocks, which would make later real-time checks drop.
+var later = DateTime.UtcNow.AddHours(1);   // past every cooldown, so the page's channel settings are what we test
+var seenRaw = new List<String>();
+TriggerBus.Received += m => seenRaw.Add(m.Trigger);
+var duck = NotificationPolicy.Decide(new TriggerMessage("speak_up", 0.8), later);
+Check("speak_up reaches the screen channel by default", duck != null && duck.Overlay, duck == null ? "dropped" : "no overlay");
+SessionState.OnOverlay(duck.Message);
+Check("duck shows on screen", SessionState.OverlaySnapshot().animal == "duck");
+SessionState.ClearSpeakAlert();
+Check("speak_ok ends the duck", SessionState.OverlaySnapshot().animal == null);
+var snail = NotificationPolicy.Decide(new TriggerMessage("pace_too_fast", 0.9), later.AddHours(1));
+Check("pace_too_fast reaches the screen channel", snail != null && snail.Overlay);
+SessionState.OnOverlay(snail.Message);
+Check("snail shows on screen", SessionState.OverlaySnapshot().animal == "snail");
+SessionState.ClearPaceAlert();
+Check("pace_ok ends the snail", SessionState.OverlaySnapshot().animal == null);
+var owl = NotificationPolicy.Decide(new TriggerMessage("blink_low", 0.8), later.AddHours(2));
+Check("blink_low reaches the screen channel", owl != null && owl.Overlay);
+SessionState.OnOverlay(owl.Message);
+Check("owl shows on screen", SessionState.OverlaySnapshot().animal == "owl");
+SessionState.ClearBlinkAlert();
+Check("blink_detected ends the owl", SessionState.OverlaySnapshot().animal == null);
+seenRaw.Clear();
+Check("/signal/speak_up/false releases the duck (speak_ok)", (await Send("GET", "/signal/speak_up/false")).code == 200 && seenRaw.Contains("speak_ok"));
+Check("speak_ok is a known trigger", (await Send("GET", "/triggers")).body.Contains("speak_ok"));
+Check("/signal/presence/false -> away", (await Send("GET", "/signal/presence/false")).code == 200 && !PomodoroState.AtDesk);
+Check("/signal/presence/true -> at desk", (await Send("GET", "/signal/presence/true")).code == 200 && PomodoroState.AtDesk);
+UiSettings.SetFeatureEnabled("pomodoro", false);
+Check("break_due is DROPPED while Pomodoro is off on the page", NotificationPolicy.Decide(new TriggerMessage("break_due", 0.7), later.AddHours(3)) == null);
+UiSettings.SetFeatureEnabled("pomodoro", true);
+Check("break_due is delivered once Pomodoro is on, mouse buzzes on the FIRST message (the plugin timer sends it once)", NotificationPolicy.Decide(new TriggerMessage("break_due", 0.7), later.AddHours(4)) is { } bdue && bdue.Haptic && bdue.Visual && bdue.Overlay);
+UiSettings.SetFeatureEnabled("pomodoro", false);
+
 server.Stop();
 Console.WriteLine();
 Console.WriteLine($"{pass} passed, {fail} failed");

@@ -1,26 +1,47 @@
-# Pomodoro (break_due) with the Logi Gaze Tracker
+# Pomodoro with the Logi Gaze Tracker (one clock, owned by the plugin)
 
-Work clock runs only while you are at the computer and looking at the screen. 25 min of real work -> `break_due`
-(Soft x3 buzz after 5 s if it persists, through the notification policy). Taking a real break (away 5 min) restarts the clock and sends `lookaway_done`.
+**The plugin owns the clock** (`PomodoroState`, settings page, Keypad timer, `break_due` / `break_over`). The Python monitor
+(`brain/src/brain/monitors/pomodoro_monitor.py`) only tells it where you are: `/signal/presence/true|false`.
 
-| Situation | Clock |
-|---|---|
-| face seen, eyes on screen (5 % margin) | runs |
-| no face < 30 s / eyes off-screen < 60 s | still runs (short glance / short trip) |
-| no face >= 30 s or eyes off-screen >= 60 s | **paused**, continues by itself |
-| away >= 5 min | restarts from 0 (a break) |
-| Gaze Tracker app not running | clock does not run (data gap never counts) |
+| Situation seen by the Gaze Tracker | Sent to the plugin | Clock |
+|---|---|---|
+| face seen, eyes on the screen (5 % margin) | at the desk | runs |
+| no face < 30 s, or eyes off-screen < 60 s | at the desk (short glance / short trip) | runs |
+| no face >= 30 s, or eyes off-screen >= 60 s | away | **stops**, continues when you are back |
+| away for the page's "reset after" minutes (default 5) | away | plugin resets the timer (a break) |
+| Gaze Tracker app not running | nothing | the plugin keeps its last state |
 
-## Run
+Looking down at a phone usually makes the Gaze Tracker lose your face completely, so it counts as "no face" (pause after 30 s).
+
+## Run it
 1. Install **Gaze Tracker** (Windows installer: https://github.com/Logitech/hackathons/releases/tag/logi-gaze-tracker), tray icon -> Controls -> Setup
-   (camera, 1920x1080, measure screen mm + camera position), **Apply rig**, then **Start calibration** (9 points, click/Space on each).
-2. `cd brain && uv sync` (adds `websockets`)
-3. `uv run python src/brain/monitors/pomodoro_monitor.py --simulate` (no hardware, 80 s) then
-   `uv run python src/brain/monitors/pomodoro_monitor.py --work-min 1 --force` (real, 1 min for a quick test)
-4. Rebuild the plugin (`dotnet build -c Debug`): `break_due` is a new trigger and the old plugin answers 400 to it. Check `/health` build time.
+   (camera, 1920x1080, screen size in mm, camera position), **Apply rig**, **Start calibration** (9 points).
+2. Rebuild the plugin (`dotnet build -c Debug` in `plugin/WorkHealthCoachPlugin/src`), restart Options+.
+3. **Switch Pomodoro ON**: settings page http://127.0.0.1:8787/ (Pomodoro card) or the "Pomodoro" key on the Keypad. Until it is on, no clock runs and
+   `break_due` is dropped by the policy (the monitor prints a hint).
+4. `cd brain && uv run python src/brain/app.py --no-blink --no-pace --pomodoro` (chip in the top-right corner: green WORK, grey PAUSED, blue BREAK).
+   Without the launcher: `uv run python src/brain/monitors/pomodoro_monitor.py` (no chip). `--simulate` = scripted fake person, no hardware, 80 s.
 
-## Unverified (test on the real machine)
-- Does the Gaze Tracker run next to the LogiInsight camera (one camera, two programs)? If not, the Gaze Tracker needs another webcam.
-- `gaze` is documented as `null` without a face OR without calibration; we count presence from `face.bounding_box_norm` too, but that field's behaviour with no face is not documented. Watch the printed "face / no face" in the log.
-- Thresholds (30 s / 60 s / 5 min) are defaults from HANDOFF, tune with the flags.
-- Not in `app.py` yet; run it as its own process. Keypad has no special break screen yet (generic alert only).
+## Quick checks (do these before a long test)
+- **15-second self-test, no camera, no Gaze Tracker:** `uv run python src/brain/monitors/pomodoro_monitor.py --selftest`
+  It checks that the plugin answers, Pomodoro is on, the timer runs, and that presence true/false starts/stops the clock.
+  FAIL messages say what to do (switch Pomodoro on, press play, wrong port ...).
+- **Short thresholds for a human test:** `app.py --no-blink --no-pace --pomodoro --absent-pause 4 --lookaway-pause 6 --status-every 2`
+  (instead of 30 s / 60 s / 10 s). Look away for ~8 s instead of 40 s.
+- **On the page** set the focus time to 5 min (the minimum) and "Reset the timer if away for" to 1 min; "Demo: skip ahead" jumps over the away time.
+- **Status line** `[running=... counting=... plugin-sees-desk=...]`: `running=False` = the plugin's timer is paused (chip: TIMER PAUSED, press play);
+  `plugin-sees-desk=False` while the camera says "at desk" = the presence signal does not reach the plugin.
+
+## Old mode
+`--own-timer`: the Python program keeps its own clock (`--work-min`, `--break-min`) and sends `break_due` every 2 s until you take a break.
+Only use it with the plugin's Pomodoro **switched off** in the plugin, otherwise you get two clocks and double reminders.
+
+## Verified
+- Plugin clock + simulated presence together (harness `--serve` + `pomodoro_monitor.py --simulate`): the clock stops ~5 s after "away", resumes on return.
+- Real Windows run of the EARLIER version (Python-owned clock): presence (`face`/`gaze` become `null` when you leave), pause / resume, the chip, the break reminder.
+- Policy: the mouse buzzes on the FIRST `break_due` (the plugin timer sends it once per phase; `HapticAfterSec = 0`).
+
+## Unverified
+- The new presence-only path on the real Windows machine (plugin clock + real Gaze Tracker): only run in simulation so far.
+- The Gaze Tracker next to the LogiInsight camera AI running at the same time.
+- Thresholds (30 s / 60 s) were chosen from one look-away test.

@@ -1,14 +1,19 @@
-"""Pomodoro monitor: 25 min of REAL work (you are at the computer and look at the screen), then break_due.
+"""Pomodoro presence monitor: tells the plugin whether you are at the computer AND looking at the screen.
 
 Presence and focus come from the Logi Gaze Tracker app (tray app, ws://127.0.0.1:8964, calibrate it once: docs/POMODORO.md).
- - face seen, eyes on the screen -> the work clock runs
- - no face for 30 s / eyes off-screen for 60 s -> the clock PAUSES (continues by itself when you are back)
- - away for 5 min -> counts as a break, clock restarts
- - 25 min of work done -> break_due is sent every 2 s until you really take the break (lookaway_done is sent then)
+ - face seen, eyes on the screen                       -> at the desk
+ - no face for 30 s / eyes off-screen for 60 s         -> away (a short glance or trip does not count)
+
+DEFAULT (the plugin owns the clock): this program only sends /signal/presence/true|false. The plugin runs the timer (settings page:
+focus/break minutes, Keypad timer, break_due / break_over notifications). Switch Pomodoro ON on the settings page
+(http://127.0.0.1:8787/) or with the Pomodoro key on the Keypad. The on-screen chip (app.py --pomodoro) shows the plugin's clock.
+
+--own-timer (old standalone mode): this program keeps its own clock and sends break_due every 2 s until you take the break.
+Do not use both clocks at once: two clocks mean double reminders.
 
     cd brain
-    uv run python src/brain/monitors/pomodoro_monitor.py --simulate        # NO hardware, 70 s, shortened times
-    uv run python src/brain/monitors/pomodoro_monitor.py --work-min 25     # real: Gaze Tracker must be running + calibrated
+    uv run python src/brain/monitors/pomodoro_monitor.py --simulate        # NO hardware, 80 s, shortened times
+    uv run python src/brain/monitors/pomodoro_monitor.py                   # real: Gaze Tracker must be running + calibrated
 """
 import argparse
 import json
@@ -111,22 +116,33 @@ def add_args(ap):
     ap.add_argument("--lookaway-pause", type=float, default=60.0, help="seconds looking off-screen before the clock pauses")
     ap.add_argument("--break-min", type=float, default=5.0, help="minutes away that count as a taken break")
     ap.add_argument("--gaze-url", default="ws://127.0.0.1:8964")
-    ap.add_argument("--remind-every", type=float, default=2.0, help="seconds between break_due messages while a break is due")
+    ap.add_argument("--remind-every", type=float, default=2.0, help="seconds between break_due messages while a break is due (--own-timer only)")
+    ap.add_argument("--status-every", type=float, default=10.0, help="seconds between status lines (use 2 while testing)")
+    ap.add_argument("--selftest", action="store_true", help="15-second check of monitor -> plugin clock (no camera, no Gaze Tracker needed), then exit")
+    ap.add_argument("--own-timer", action="store_true", help="old mode: keep the clock here and send break_due yourself (default: the plugin owns the clock)")
 
 
 def run(a, stop, say=print):
     coach = CoachClient(min_repeat_s=2.0)
     if not coach.health():
         say("WARNING: the Logi plugin does NOT answer on 127.0.0.1:8787, messages are only printed.")
+    own = getattr(a, "own_timer", False)
     if a.simulate:
         cfg = PomodoroConfig(work_s=40, absent_pause_s=5, lookaway_pause_s=8, reset_s=14)
         feed = FakeGaze()
-        say("SIMULATION (times shortened, 40 s of work): away 10-22 s and off-screen 35-48 s -> PAUSED; DUE ~52 s; away 58-75 s -> break taken. Runs 80 s.")
+        say("SIMULATION (times shortened): away 10-22 s and off-screen 35-48 s -> not at the desk (after a 5-8 s grace). Runs 80 s."
+            + (" Own timer: 40 s of work, DUE ~52 s, away 58-75 s = break taken." if own else ""))
     else:
         cfg = PomodoroConfig(a.work_min * 60, a.absent_pause, a.lookaway_pause, a.break_min * 60)
         feed = GazeFeed(a.gaze_url)
-        say(f"Pomodoro: {a.work_min:.0f} min of work. Needs the Gaze Tracker app running + calibrated (ws {a.gaze_url}).")
+        say(f"Pomodoro: needs the Gaze Tracker app running + calibrated (ws {a.gaze_url}).")
+    if not own:
+        # presence only: the plugin owns the clock, so this tracker must never start a work clock or a break of its own
+        cfg = PomodoroConfig(work_s=1e12, absent_pause_s=cfg.absent_pause_s, lookaway_pause_s=cfg.lookaway_pause_s, reset_s=1e12)
+        say("The plugin owns the Pomodoro clock: sending presence only. Switch Pomodoro ON at http://127.0.0.1:8787/ (or the Pomodoro key).")
     tracker = PomodoroTracker(cfg)
+    last_presence, last_presence_sent, last_poll, hinted = None, 0.0, 0.0, False
+    plugin, hinted_paused, desk_mismatch_since = None, False, None
     t0 = time.monotonic()
     last_state, last_remind, last_status, warned = None, 0.0, t0, False
     try:
@@ -146,18 +162,57 @@ def run(a, stop, say=print):
             snap = feed.latest if now - feed.latest_at < 3.0 else None      # stale data = nobody seen
             present, focused = observe(snap)
             state = tracker.update(now, present, focused)
-            STATUS["state"], STATUS["remaining"] = state, tracker.remaining_s()
+            if own:
+                STATUS["state"], STATUS["remaining"] = state, tracker.remaining_s()
+            else:
+                at_desk = state != PAUSED
+                if at_desk != last_presence or now - last_presence_sent >= 10:      # on change, and a heartbeat (plugin restarts)
+                    coach.signal("presence", at_desk)
+                    last_presence, last_presence_sent = at_desk, now
+                if now - last_poll >= 1.0:                                           # the chip shows the PLUGIN's clock
+                    last_poll = now
+                    p = coach.get_json("/pomodoro")
+                    plugin = p
+                    if p and p.get("active") and not p.get("running") and at_desk and not hinted_paused:
+                        say("The plugin's timer is PAUSED (running=false), so it will not count even though you are at the desk. "
+                            "Press play on the Keypad / the page's Pomodoro card, or: Invoke-RestMethod -Method Post http://127.0.0.1:8787/pomodoro/toggle")
+                        hinted_paused = True
+                    if p and p.get("running"):
+                        hinted_paused = False
+                    if p is None or not p.get("active"):
+                        STATUS["state"] = None
+                        if p is not None and not hinted:
+                            say("Pomodoro is switched OFF in the plugin (no clock, no chip): turn it on at http://127.0.0.1:8787/ or with the Pomodoro key.")
+                            hinted = True
+                    else:
+                        hinted = False
+                        STATUS["remaining"] = p.get("left", 0)
+                        STATUS["state"] = ("break" if p.get("phase") != "work" else "work" if p.get("counting")
+                                           else "stopped" if not p.get("running") else "paused")
             if state != last_state:
-                say(f"[{now - t0:5.0f}s] {state.upper()}  (worked {tracker.worked:.0f}s, "
-                    f"{'face' if present else 'no face'}, {'on screen' if focused else 'off screen'})")
+                if own:
+                    say(f"[{now - t0:5.0f}s] {state.upper()}  (worked {tracker.worked:.0f}s, "
+                        f"{'face' if present else 'no face'}, {'on screen' if focused else 'off screen'})")
+                else:
+                    say(f"[{now - t0:5.0f}s] {'AT THE DESK' if state != PAUSED else 'AWAY (not here / not looking)'} "
+                        f"({'face' if present else 'no face'}, {'on screen' if focused else 'off screen'}) -> plugin")
                 last_state = state
-            if state == DUE and now - last_remind >= a.remind_every:
+            if own and state == DUE and now - last_remind >= a.remind_every:
                 last_remind = now
                 coach.trigger(BREAK_DUE, 0.7, force=a.force)
-            if tracker.break_taken:
+            if own and tracker.break_taken:
                 say(f"[{now - t0:5.0f}s] break taken -> clock restarted")
                 coach.trigger(LOOKAWAY_DONE, 1.0, force=a.force)
-            if now - last_status >= 10 and state != DUE:
+            if not own and now - last_status >= a.status_every:                      # a heartbeat, so a quiet log does not look like a dead one
+                last_status = now
+                left = int(STATUS["remaining"])
+                raw = (f" [running={plugin.get('running')} counting={plugin.get('counting')} plugin-sees-desk={plugin.get('atDesk')}]"
+                       if plugin else "")
+                clock = (f"plugin clock: {STATUS['state']} {left // 60:02d}:{left % 60:02d}{raw}" if STATUS["state"]
+                         else "plugin clock: not running (Pomodoro off, or the plugin does not answer)")
+                say(f"[{now - t0:5.0f}s] {'at desk' if state != PAUSED else 'AWAY'} | face {'yes' if present else 'NO'} | "
+                    f"gaze {'on screen' if focused else 'off screen'} | {clock}")
+            if own and now - last_status >= 10 and state != DUE:
                 last_status = now
                 say(f"[{now - t0:5.0f}s] {state}: {tracker.remaining_s() / 60:.1f} min of work left"
                     + (" (paused: not looking / not here)" if state == PAUSED else ""))
@@ -165,7 +220,66 @@ def run(a, stop, say=print):
     finally:
         STATUS["state"] = None
         feed.stop()
+        if not own:
+            coach.signal("presence", True)      # do not leave the plugin clock frozen "away" when this program stops
+            time.sleep(0.3)
         say("Pomodoro monitor stopped.")
+
+
+def selftest(a, say=print):
+    """Checks monitor -> plugin: presence true makes the plugin clock count, presence false stops it. About 15 s, no camera needed."""
+    coach = CoachClient(timeout_s=1.5)
+    ok = True
+
+    def fail(msg):
+        nonlocal ok
+        ok = False
+        say("  FAIL  " + msg)
+
+    p = coach.get_json("/pomodoro", timeout_s=1.5)
+    if p is None:
+        say(f"  FAIL  the plugin does not answer on {coach.base} (Options+ running? plugin built? right port?). Last error: {coach.last_error}")
+        return 1
+    say(f"  plugin answers. clock: active={p['active']} running={p['running']} counting={p['counting']} atDesk={p['atDesk']} "
+        f"phase={p['phase']} left={p['left']} s")
+    if not p["active"]:
+        say("  FAIL  Pomodoro is switched OFF in the plugin. Switch it on at http://127.0.0.1:8787/ (Pomodoro card) or with the Pomodoro key, then run this again.")
+        return 1
+    if not p["running"]:
+        say("  note  the plugin's timer is PAUSED (running=false): resuming it for the test (POST /pomodoro/toggle)")
+        if coach.post_json("/pomodoro/toggle") is None:
+            fail("could not resume the timer")
+        time.sleep(0.5)
+
+    def left_after(seconds):
+        a0 = coach.get_json("/pomodoro")
+        time.sleep(seconds)
+        a1 = coach.get_json("/pomodoro")
+        return a0, a1
+
+    coach.post_json("/signal/presence/true")
+    time.sleep(0.5)
+    a0, a1 = left_after(3.5)
+    if a0 and a1 and a1["left"] < a0["left"]:
+        say(f"  ok    at the desk: the clock counts down ({a0['left']} -> {a1['left']} s)")
+    else:
+        fail(f"at the desk but the clock does not count: {a0} -> {a1}")
+    coach.post_json("/signal/presence/false")
+    time.sleep(0.5)
+    a0, a1 = left_after(3.5)
+    if a0 and a1 and a0["atDesk"] is False and a1["left"] == a0["left"]:
+        say(f"  ok    away: the clock stops ({a0['left']} s stays)")
+    else:
+        fail(f"away but the clock did not stop (or the plugin did not take the presence): {a0} -> {a1}")
+    coach.post_json("/signal/presence/true")
+    time.sleep(0.5)
+    a0, a1 = left_after(2.5)
+    if a0 and a1 and a1["left"] < a0["left"]:
+        say(f"  ok    back at the desk: the clock continues ({a0['left']} -> {a1['left']} s)")
+    else:
+        fail(f"back at the desk but the clock does not continue: {a0} -> {a1}")
+    say("SELFTEST " + ("PASSED: the monitor and the plugin clock work together." if ok else "FAILED (see above)."))
+    return 0 if ok else 1
 
 
 def main():
@@ -174,6 +288,8 @@ def main():
     ap.add_argument("--force", action="store_true", help="demo: the plugin skips its notification rules")
     ap.add_argument("--simulate", action="store_true", help="NO hardware: scripted fake person")
     a = ap.parse_args()
+    if a.selftest:
+        sys.exit(selftest(a, say=lambda m: print(m, flush=True)))
     stop = threading.Event()
     try:
         run(a, stop)
