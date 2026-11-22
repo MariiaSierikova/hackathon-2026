@@ -249,6 +249,9 @@ namespace Loupedeck.WorkHealthCoachPlugin
             return def;
         }
 
+        private static Double Dbl(JsonNode n, Double def) =>
+            n is JsonValue v && v.TryGetValue<Double>(out var d) ? d : def;
+
         private static String Str(JsonNode n, String def) =>
             n is JsonValue v && v.TryGetValue<String>(out var s) && !String.IsNullOrEmpty(s) ? s : def;
 
@@ -316,6 +319,36 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
             s.Preset = "custom";
             NotificationPolicy.SetSettings(s);
+
+            // volume when far: only act while the feature AND the master switch are on
+            if (st["features"]?["distance"] is JsonObject d)
+            {
+                var dp = d["params"];
+                FarVolume.Configure(
+                    Bool(d["enabled"], false) && s.Master,
+                    Int(dp?["shrink"], 30), Dbl(dp?["hold"], 2), Int(dp?["boost"], 20), Int(dp?["cap"], 90),
+                    Bool(dp?["smooth"], true), Bool(dp?["restore"], true), Int(dp?["leave"], 120), Bool(dp?["resume"], true),
+                    Str(dp?["leaveAction"], "Mute the sound").StartsWith("Press", StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                FarVolume.Configure(false, 30, 2, 20, 90, true, true, 120, true, false);
+            }
+
+            // person behind: detection settings and the automatic / ring responses
+            var bh = st["features"]?["behind"] as JsonObject;
+            var bp = bh?["params"];
+            PersonBehind.Configure(
+                (bh == null || Bool(bh["enabled"], true)) && s.Master,
+                Dbl(bp?["hold"], 2), Dbl(bp?["range"], 3), Bool(bp?["passby"], true), Dbl(bp?["linger"], 3));
+            BehindResponse.Configure(
+                Str(bp?["act"], "Only notify me") switch
+                {
+                    "Hide windows (my shortcut)" => "hide",
+                    "Lock the screen" => "lock",
+                    _ => "notify",
+                },
+                Str(bp?["sc"], String.Empty), Str(bp?["scBack"], String.Empty), Int(bp?["back"], 0), Int(bp?["duck"], 30));
 
             if (st["features"]?["pomodoro"] is JsonObject p)
             {

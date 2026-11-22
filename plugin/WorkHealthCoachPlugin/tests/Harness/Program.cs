@@ -7,6 +7,16 @@ using Loupedeck.WorkHealthCoachPlugin;
 // Test harness: exercises the plugin code that does not need Options+ or a device.
 // Safety: settings files are redirected to a temp folder; the run aborts if that did not work.
 
+if (args.Length == 1 && args[0] == "--enums")
+{
+    foreach (var t in new[] { typeof(VirtualKeyCode), typeof(ModifierKey) })
+    {
+        Console.WriteLine($"{t.Name}: {String.Join(" ", Enum.GetNames(t))}");
+    }
+
+    return 0;
+}
+
 // --render <folder>: draws the Keypad screens (whole 3x3 picture) to PNG files for a visual check. Touches no settings.
 if (args.Length == 2 && args[0] == "--render")
 {
@@ -51,10 +61,11 @@ if (args.Length >= 1 && args[0] == "--serve")
     UiSettings.Init();
     NotificationPolicy.Decided += d => Console.WriteLine($"decision: {d.Message.Trigger} haptic={d.Haptic} keypad={d.Visual} screen={d.Overlay} pattern={d.Rule?.HapticPattern}");
     TriggerBus.Received += m => { if (m.Trigger is not ("blink_detected" or "pace_ok")) { NotificationPolicy.Evaluate(m); } };
+    FarVolume.Audio = new FakeAudio { Volume = 40, Log = true };   // never the real volume
     var srv = new LocalServer();
     srv.Start();
     var ticker = new System.Timers.Timer(1000) { AutoReset = true };
-    ticker.Elapsed += (_, _) => { SessionState.Tick(); PomodoroState.Tick(); };
+    ticker.Elapsed += (_, _) => { SessionState.Tick(); PomodoroState.Tick(); FarVolume.Tick(); PersonBehind.Tick(); };
     ticker.Start();
     Console.WriteLine($"serving http://127.0.0.1:{LocalServer.Port}/  (data in {tmp})");
     await Task.Delay(TimeSpan.FromSeconds(args.Length > 1 ? Int32.Parse(args[1]) : 600));
@@ -231,10 +242,329 @@ Check("stop switches the feature off", !PomodoroState.Active && !UiSettings.Feat
 await Send("POST", "/pomodoro/start");
 Check("start switches the feature on", PomodoroState.Active && UiSettings.FeatureEnabled("pomodoro"));
 
+Console.WriteLine("Volume when far (fake sound device + fake clock, no camera)");
+var audio = new FakeAudio { Volume = 40 };
+var fclock = DateTime.UtcNow;
+var media = 0;
+var farTriggers = 0;
+FarVolume.Audio = audio;
+FarVolume.Now = () => fclock;
+FarVolume.SendPlayPause = () => media++;
+TriggerBus.Received += m => { if (m.Trigger == "volume_far") { farTriggers++; } };
+void Step(Int32 sec) { for (var i = 0; i < sec; i++) { fclock = fclock.AddSeconds(1); FarVolume.Tick(1); } }
+void Hold(Double ratio, Int32 sec) { for (var i = 0; i < sec; i++) { FarVolume.SetRatio(ratio); Step(1); } }
+void Cfg(Boolean smooth = false, Boolean restore = true, Int32 leave = 120, Boolean resume = true, Boolean key = false, Int32 cap = 90, Int32 boost = 20) =>
+    FarVolume.Configure(true, 30, 2, boost, cap, smooth, restore, leave, resume, key);
+
+FarVolume.Configure(false, 30, 2, 20, 90, false, true, 120, true, false);
+FarVolume.SetPresence(true);
+Hold(0.4, 6);
+Check("feature off: nothing changes", audio.Volume == 40 && audio.Sets == 0);
+
+Cfg();
+Hold(1.0, 3);
+Check("near the screen: no change", audio.Volume == 40);
+Hold(0.6, 1);
+Check("far, but not for 2 s yet: no change", audio.Volume == 40);
+Hold(0.6, 2);
+Check("far for 2 s: volume 40 -> 60 and one volume_far trigger", audio.Volume == 60 && farTriggers == 1 && FarVolume.Boosted, $"vol={audio.Volume} triggers={farTriggers}");
+Hold(1.0, 3);
+Check("back near: volume restored to 40", audio.Volume == 40 && !FarVolume.Boosted, $"vol={audio.Volume}");
+
+audio.Volume = 85; farTriggers = 0;
+Hold(0.5, 4);
+Check("never above the cap (85 + 20 -> 90)", audio.Volume == 90);
+Hold(1.0, 4);
+Check("restored to 85", audio.Volume == 85);
+audio.Volume = 95; farTriggers = 0;
+Hold(0.5, 4);
+Check("already above the cap: never lowered, no raise", audio.Volume == 95 && farTriggers == 0);
+Hold(1.0, 4);
+
+Cfg(smooth: true);
+audio.Volume = 40; audio.MaxJump = 0;
+Hold(0.5, 3);
+Check("smooth: first step only +5", audio.Volume == 45, $"vol={audio.Volume}");
+Hold(0.5, 4);
+Check("smooth: reaches 60 in small steps", audio.Volume == 60 && audio.MaxJump <= 5, $"vol={audio.Volume} maxJump={audio.MaxJump}");
+Hold(1.0, 12);
+Check("smooth: restores to 40 in small steps", audio.Volume == 40 && audio.MaxJump <= 5, $"vol={audio.Volume} maxJump={audio.MaxJump}");
+
+Cfg();
+audio.Volume = 40;
+Hold(0.5, 3);
+audio.Volume = 30;   // the user turns it down by hand
+Hold(0.5, 4);
+Check("user changed the volume: we do not fight them", audio.Volume == 30 && !FarVolume.Boosted, $"vol={audio.Volume}");
+Hold(1.0, 3);
+Hold(0.5, 3);
+Check("later far again: boosts from the new volume", audio.Volume == 50, $"vol={audio.Volume}");
+Hold(1.0, 3);
+Check("and restores to the user's 30", audio.Volume == 30);
+
+Cfg();
+audio.Volume = 40; audio.Muted = false;
+FarVolume.SetPresence(false);
+Step(3);
+Check("out of the frame counts as far: volume raised", audio.Volume == 60, $"vol={audio.Volume}");
+Step(100);
+Check("away less than 120 s: not muted", audio.Muted == false);
+Step(21);
+Check("away 120 s: sound muted", audio.Muted == true && FarVolume.Stopped);
+FarVolume.SetPresence(true);
+Step(4);
+Check("back: unmuted and volume restored", audio.Muted == false && audio.Volume == 40 && !FarVolume.Stopped, $"muted={audio.Muted} vol={audio.Volume}");
+
+audio.Muted = true;
+FarVolume.SetPresence(false);
+Step(125);
+FarVolume.SetPresence(true);
+Step(4);
+Check("user had it muted: stays muted", audio.Muted == true);
+audio.Muted = false;
+
+media = 0;
+Cfg(leave: 10, key: true);
+FarVolume.SetPresence(false);
+Step(12);
+Check("Play/Pause mode: pressed once after 10 s away", media == 1 && audio.Muted == false);
+FarVolume.SetPresence(true);
+Step(4);
+Check("Play/Pause mode: pressed again on return", media == 2);
+Cfg(leave: 10, key: true, resume: false);
+FarVolume.SetPresence(false);
+Step(12);
+FarVolume.SetPresence(true);
+Step(4);
+Check("resume off: no second press", media == 3);
+
+Cfg();
+audio.Volume = 40; audio.Muted = false;
+FarVolume.SetPresence(false);
+Step(125);
+FarVolume.Configure(false, 30, 2, 20, 90, false, true, 120, true, false);
+Check("switching the feature off gives sound and volume back", audio.Muted == false && audio.Volume == 40, $"muted={audio.Muted} vol={audio.Volume}");
+FarVolume.SetPresence(true);
+
+Cfg();
+audio.Volume = null;
+Hold(0.4, 6);
+var setsBefore = audio.Sets;
+Hold(0.4, 6);
+Check("no readable volume: no crash, nothing set", audio.Sets == setsBefore);
+audio.Volume = 40;
+FarVolume.SetPresence(false); FarVolume.SetPresence(true);
+Step(12);
+
+Cfg();
+audio.Volume = 40;
+FarVolume.SetRatio(0.5);
+Step(12);
+Check("no fresh distance samples: not treated as far for ever", audio.Volume == 40 && !FarVolume.Boosted, $"vol={audio.Volume}");
+
+Console.WriteLine("Volume when far: API and settings page mapping");
+Check("calibrate with no data -> 400", (await Send("POST", "/distance/calibrate")).code == 400);
+Check("face before calibration -> 400", (await Send("POST", "/distance", "{\"face\":0.09}")).code == 400);
+Check("calibrate from the latest face", (await Send("POST", "/distance/calibrate")).code == 200);
+Check("face 0.045 vs baseline 0.09 -> ratio 0.5", (await Send("POST", "/distance", "{\"face\":0.045}")).code == 200 && (await Send("GET", "/distance")).body is var gj && gj.Contains("\"ratio\":0.5") && gj.Contains("\"baseline\":0.09"));
+Check("ratio accepted", (await Send("POST", "/distance", "{\"ratio\":0.8}")).code == 200);
+Check("bad body -> 400", (await Send("POST", "/distance", "{\"nope\":1}")).code == 400);
+Check("not json -> 400", (await Send("POST", "/distance", "hello")).code == 400);
+Check("GET /distance shows the (fake) system volume", (await Send("GET", "/distance")).body.Contains($"\"volume\":{audio.Volume}"));
+await Send("POST", "/presence", "{\"atDesk\":false}");
+Check("presence reaches the volume engine", !FarVolume.AtDesk);
+await Send("GET", "/signal/presence/true");
+Check("signal/presence too", FarVolume.AtDesk);
+
+const String farState = """
+{"master":true,"profile":"everyday","muted":[],"features":{"distance":{"enabled":true,"cooldown":0,"params":{"shrink":40,"hold":3,"boost":15,"cap":80,"smooth":false,"restore":true,"leave":60,"resume":true,"leaveAction":"Press Play/Pause"}}}}
+""";
+Check("state accepted", (await Send("POST", "/ui-state", farState)).code == 200);
+Check("page settings reach the engine", FarVolume.Enabled && FarVolume.ShrinkPct == 40 && FarVolume.HoldSec == 3 && FarVolume.BoostPct == 15 && FarVolume.CapPct == 80 && FarVolume.LeaveSec == 60 && FarVolume.UsePlayPause && !FarVolume.Smooth);
+UiSettings.SetMaster(false);
+Check("master off switches the feature off", !FarVolume.Enabled);
+UiSettings.SetMaster(true);
+Check("master on switches it back on", FarVolume.Enabled);
+UiSettings.SetFeatureEnabled("distance", false);
+Check("feature key off", !FarVolume.Enabled);
+
+if (OperatingSystem.IsMacOS())
+{
+    Console.WriteLine("Volume when far: real macOS volume (read-only; sets the SAME value back, never changes loudness or mute)");
+    var real = new MacAudio();
+    var rv = real.GetVolume();
+    Check("reads the system volume", rv is >= 0 and <= 100, $"{rv}");
+    Check("reads the mute state", real.GetMuted() != null);
+    Check("setting the same volume works and changes nothing", rv.HasValue && real.SetVolume(rv.Value) && real.GetVolume() == rv);
+}
+
+FarVolume.Audio = new NoAudio();
+
+Console.WriteLine("Person behind (simulated walkers, fake clock, no camera)");
+FarVolume.Audio = audio;
+var bclock = DateTime.UtcNow;
+PersonBehind.Now = () => bclock;
+var behindAlerts = new List<Double>();
+TriggerBus.Received += m => { if (m.Trigger == "person_behind") { behindAlerts.Add(m.Severity); } };
+var shortcuts = new List<(VirtualKeyCode Key, ModifierKey Mods)>();
+var playPause = 0;
+BehindResponse.SendShortcut = (k, m) => shortcuts.Add((k, m));
+BehindResponse.SendPlayPause = () => playPause++;
+var cmdKey = OperatingSystem.IsMacOS() ? ModifierKey.Command : ModifierKey.Windows;
+
+// 8 samples a second, the engine ticks once a second
+void Feed(Int32 id, Double seconds, Func<Double, (Double X, Double Size)> at, Int32? id2 = null, Func<Double, (Double X, Double Size)> at2 = null)
+{
+    var i = 0;
+    for (var t = 0.0; t < seconds - 1e-9; t += 0.125)
+    {
+        bclock = bclock.AddSeconds(0.125);
+        var a = at(t);
+        PersonBehind.AddSample(id, a.X, a.Size);
+        if (id2.HasValue) { var b = at2(t); PersonBehind.AddSample(id2.Value, b.X, b.Size); }
+        if (++i % 8 == 0) { PersonBehind.Tick(); }
+    }
+}
+void Quiet(Int32 seconds) { for (var i = 0; i < seconds; i++) { bclock = bclock.AddSeconds(1); PersonBehind.Tick(); } }
+void ResetBehind() { PersonBehind.Clear(); Quiet(5); behindAlerts.Clear(); shortcuts.Clear(); }
+(Double X, Double Size) Pass(Double t) => (0.0 + 0.3 * t, 0.06);          // crosses the picture sideways, about 5 face widths a second
+(Double X, Double Size) Come(Double t) => (0.5, 0.03 + 0.02 * t);          // straight towards the camera, face grows
+(Double X, Double Size) Stand(Double t) => (0.55 + 0.01 * Math.Sin(t), 0.07);   // stands behind the chair
+
+PersonBehind.Configure(true, 2, 3, true, 3);
+BehindResponse.Configure("notify", "⌘ ⌥ H", "", 0, 30);
+Quiet(3);
+Check("nobody there: no alert", behindAlerts.Count == 0);
+Feed(1, 3, Pass); Quiet(4);
+Check("someone walks past: NO alert", behindAlerts.Count == 0, $"alerts={behindAlerts.Count}");
+ResetBehind();
+Feed(2, 4, Come);
+Check("someone comes closer: alert (severity 0.9)", behindAlerts.Count == 1 && behindAlerts[0] == 0.9 && (PersonBehind.LastReason ?? "").StartsWith("coming"), $"alerts={behindAlerts.Count} reason={PersonBehind.LastReason}");
+Feed(2, 3, _ => (0.5, 0.11));
+Check("one alert per visit", behindAlerts.Count == 1);
+ResetBehind();
+Feed(3, 2.6, Stand);
+Check("standing behind, not long enough yet: no alert", behindAlerts.Count == 0);
+Feed(3, 1.5, t => Stand(t + 2.6));
+Check("stays behind for 3 s: alert (severity 0.7)", behindAlerts.Count == 1 && behindAlerts[0] == 0.7 && (PersonBehind.LastReason ?? "").StartsWith("stays"), $"alerts={behindAlerts.Count} reason={PersonBehind.LastReason}");
+ResetBehind();
+Feed(4, 5, t => (0.5, 0.01 + 0.002 * t));
+Check("too far away (beyond 3 m): no alert", behindAlerts.Count == 0);
+ResetBehind();
+Feed(5, 2.2, t => (0.5, 0.03 + 0.003 * t));
+Check("a visitor who is seen briefly and leaves: no alert", behindAlerts.Count == 0);
+Quiet(4);
+
+ResetBehind();
+Feed(7, 4, Pass, 8, Come);
+var tracks = JsonDocument.Parse(PersonBehind.ToJson()).RootElement.GetProperty("tracks").EnumerateArray().ToDictionary(e => e.GetProperty("id").GetInt32(), e => e.GetProperty("alerted").GetBoolean());
+Check("two people: only the one coming alerts", behindAlerts.Count == 1 && tracks.GetValueOrDefault(8) && !tracks.GetValueOrDefault(7), $"alerts={behindAlerts.Count} tracks={String.Join(",", tracks)}");
+
+ResetBehind();
+PersonBehind.Configure(true, 2, 3, false, 3);
+Feed(6, 3.2, Pass);
+Check("pass-by filter off: any face for 2 s alerts (team table rule)", behindAlerts.Count == 1 && behindAlerts[0] == 0.6, $"alerts={behindAlerts.Count}");
+PersonBehind.Configure(true, 2, 3, true, 3);
+
+ResetBehind();
+Feed(9, 3.5, Come);
+Check("visit alerts", behindAlerts.Count == 1);
+ResetBehind();
+PersonBehind.Acknowledge();
+Feed(10, 4, Come);
+Check("after 'it is fine': the next visitor within a minute is ignored", behindAlerts.Count == 0);
+bclock = bclock.AddSeconds(61); Quiet(3);
+Feed(11, 4, Come);
+Check("after a minute: alerts again", behindAlerts.Count == 1);
+
+Console.WriteLine("Person behind: responses (what the Actions Ring buttons do)");
+ResetBehind();
+BehindResponse.Configure("hide", "⌘ ⌥ H", "⌘ D", 5, 30);
+Feed(12, 4, Come);
+Check("automatic hide presses the user's shortcut", shortcuts.Count == 1 && shortcuts[0] == (VirtualKeyCode.KeyH, cmdKey | ModifierKey.Alt) && BehindResponse.Hidden, $"{String.Join(",", shortcuts)}");
+Quiet(3);
+Check("bring-back waits until the person has been gone for 5 s", BehindResponse.Hidden && shortcuts.Count == 1);
+Quiet(4);
+Check("then presses the bring-back shortcut", !BehindResponse.Hidden && shortcuts.Count == 2 && shortcuts[1] == (VirtualKeyCode.KeyD, cmdKey), $"{String.Join(",", shortcuts)}");
+ResetBehind();
+BehindResponse.Configure("lock", "⌘ ⌥ H", "", 0, 30);
+Feed(13, 4, Come);
+Check("automatic lock presses the lock shortcut", shortcuts.Count == 1 && (OperatingSystem.IsMacOS() ? shortcuts[0] == (VirtualKeyCode.KeyQ, ModifierKey.Control | ModifierKey.Command) : shortcuts[0] == (VirtualKeyCode.KeyL, ModifierKey.Windows)));
+ResetBehind();
+BehindResponse.Configure("notify", "⌘ ⌥ H", "", 0, 30);
+Feed(14, 4, Come);
+Check("'only notify me': no key pressed", behindAlerts.Count == 1 && shortcuts.Count == 0);
+
+Check("shortcut ⌘ ⌥ H", BehindResponse.TryParseShortcut("⌘ ⌥ H", out var k1, out var m1) && k1 == VirtualKeyCode.KeyH && m1 == (cmdKey | ModifierKey.Alt));
+Check("shortcut Ctrl ⇧ F5", BehindResponse.TryParseShortcut("Ctrl ⇧ F5", out var k2, out var m2) && k2 == VirtualKeyCode.F5 && m2 == (ModifierKey.Control | ModifierKey.Shift));
+Check("shortcut F11 alone", BehindResponse.TryParseShortcut("F11", out var k3, out var m3) && k3 == VirtualKeyCode.F11 && m3 == ModifierKey.None);
+Check("shortcut ⌘ D / ⌘ 5 / ⌘ Enter / Ctrl ArrowLeft", BehindResponse.TryParseShortcut("⌘ D", out var k4, out _) && k4 == VirtualKeyCode.KeyD && BehindResponse.TryParseShortcut("⌘ 5", out var k5, out _) && k5 == VirtualKeyCode.Key5 && BehindResponse.TryParseShortcut("⌘ Enter", out var k6, out _) && k6 == VirtualKeyCode.Return && BehindResponse.TryParseShortcut("Ctrl ArrowLeft", out var k7, out _) && k7 == VirtualKeyCode.ArrowLeft);
+Check("bad shortcuts are refused", !BehindResponse.TryParseShortcut("", out _, out _) && !BehindResponse.TryParseShortcut("⌘", out _, out _) && !BehindResponse.TryParseShortcut("A B", out _, out _) && !BehindResponse.TryParseShortcut("⌘ Banana", out _, out _));
+shortcuts.Clear();
+BehindResponse.Configure("notify", "", "", 0, 30);
+Check("hide with no shortcut set: nothing pressed, no crash", !BehindResponse.Hide() && shortcuts.Count == 0);
+
+playPause = 0;
+BehindResponse.Run("music"); BehindResponse.Run("music");
+Check("music toggle presses Play/Pause and remembers", playPause == 2 && !BehindResponse.MusicPaused);
+BehindResponse.Configure("notify", "", "", 0, 30);
+audio.Volume = 70;
+BehindResponse.Run("talk");
+Check("talk mode lowers the volume to 30", audio.Volume == 30 && BehindResponse.Talk);
+BehindResponse.Run("talk");
+Check("second press restores 70", audio.Volume == 70 && !BehindResponse.Talk);
+BehindResponse.Run("talk");
+audio.Volume = 50;   // the user turned it themselves
+BehindResponse.Run("talk");
+Check("user changed the volume meanwhile: left alone", audio.Volume == 50 && !BehindResponse.Talk);
+audio.Volume = 20;
+BehindResponse.Run("talk");
+Check("talk mode never raises the volume", audio.Volume == 20 && BehindResponse.Talk);
+BehindResponse.Run("talk");
+audio.Volume = null;
+BehindResponse.Run("talk");
+Check("no readable volume: no crash, no talk mode", !BehindResponse.Talk);
+audio.Volume = 40;
+Check("snooze action", BehindResponse.Run("snooze") && NotificationPolicy.Snoozed);
+NotificationPolicy.Snooze(0);
+Check("unknown action is refused", !BehindResponse.Run("nope"));
+
+Console.WriteLine("Person behind: API and settings page mapping");
+PersonBehind.Clear();
+Check("POST /behind sample", (await Send("POST", "/behind", "{\"id\":1,\"x\":0.5,\"size\":0.07}")).code == 200);
+Check("POST /behind samples list", (await Send("POST", "/behind", "{\"samples\":[{\"id\":1,\"x\":0.5,\"size\":0.07},{\"id\":2,\"x\":0.2,\"size\":0.05}]}")).body.Contains("\"samples\":2"));
+Check("bad sample -> 400", (await Send("POST", "/behind", "{\"x\":0.5}")).code == 400);
+Check("not json -> 400", (await Send("POST", "/behind", "hello")).code == 400);
+var gb = await Send("GET", "/behind");
+Check("GET /behind shows the tracks", gb.code == 200 && gb.body.Contains("\"tracks\"") && JsonDocument.Parse(gb.body).RootElement.GetProperty("tracks").GetArrayLength() == 2, $"{gb.code} {gb.body}");
+Check("POST /behind/clear", (await Send("POST", "/behind/clear")).code == 200 && JsonDocument.Parse((await Send("GET", "/behind")).body).RootElement.GetProperty("tracks").GetArrayLength() == 0);
+playPause = 0;
+Check("POST /behind/do/music", (await Send("POST", "/behind/do/music")).code == 200 && playPause == 1);
+Check("POST /behind/do/ok", (await Send("POST", "/behind/do/ok")).code == 200 && PersonBehind.AckUntil.HasValue);
+Check("unknown action -> 404", (await Send("POST", "/behind/do/nope")).code == 404);
+
+const String behindState = """
+{"master":true,"profile":"everyday","muted":[],"features":{"behind":{"enabled":true,"cooldown":60,"params":{"hold":3,"range":2,"passby":false,"linger":5,"act":"Lock the screen","sc":"Ctrl ⇧ F5","scBack":"F6","back":7,"duck":25}}}}
+""";
+Check("state accepted", (await Send("POST", "/ui-state", behindState)).code == 200);
+Check("page settings reach the engine", PersonBehind.Enabled && PersonBehind.HoldSec == 3 && PersonBehind.RangeM == 2 && !PersonBehind.FilterPassBy && PersonBehind.LingerSec == 5);
+Check("page settings reach the responses", BehindResponse.Act == "lock" && BehindResponse.HideShortcut == "Ctrl ⇧ F5" && BehindResponse.BackShortcut == "F6" && BehindResponse.BackSec == 7 && BehindResponse.DuckPct == 25);
+await Send("POST", "/ui-state", behindState.Replace("Lock the screen", "Hide windows (my shortcut)"));
+Check("'Hide windows (my shortcut)' -> hide", BehindResponse.Act == "hide");
+await Send("POST", "/ui-state", behindState.Replace("Lock the screen", "Blur the screen"));
+Check("an unknown or old choice is safe: notify only", BehindResponse.Act == "notify");
+UiSettings.SetMaster(false);
+Check("master off switches the engine off", !PersonBehind.Enabled);
+UiSettings.SetMaster(true);
+UiSettings.SetFeatureEnabled("behind", false);
+Check("feature off switches the engine off", !PersonBehind.Enabled);
+UiSettings.SetFeatureEnabled("behind", true);
+FarVolume.Audio = new NoAudio();
+
 Console.WriteLine("Persistence");
 var before = UiSettings.ToJson();
 UiSettings.Init();
-Check("state survives a reload", JsonDocument.Parse(UiSettings.ToJson()).RootElement.GetProperty("features").GetProperty("speed").GetProperty("cooldown").GetInt32() == 30);
+Check("state survives a reload", JsonDocument.Parse(UiSettings.ToJson()).RootElement.GetProperty("features").GetProperty("behind").GetProperty("params").GetProperty("hold").GetInt32() == 3);
 
 Console.WriteLine("Keypad drawing (needs the real PluginApi.dll; skipped if it cannot load)");
 try
@@ -298,4 +628,26 @@ async Task<Boolean> EnablePomodoro(Boolean on)
 {
     var r = await Send("POST", "/ui-state", state.Replace("\"pomodoro\":{\"enabled\":false", $"\"pomodoro\":{{\"enabled\":{(on ? "true" : "false")}"));
     return r.code == 200;
+}
+
+// A sound device that records what the engine does.
+class FakeAudio : ISystemAudio
+{
+    public String Name => "fake";
+    public Int32? Volume { get; set; }
+    public Boolean? Muted { get; set; } = false;
+    public Int32 Sets { get; private set; }
+    public Int32 MaxJump { get; set; }
+    public Boolean Log { get; set; }
+    public Int32? GetVolume() => Volume;
+    public Boolean? GetMuted() => Muted;
+    public Boolean SetVolume(Int32 percent)
+    {
+        if (Volume.HasValue) { MaxJump = Math.Max(MaxJump, Math.Abs(percent - Volume.Value)); }
+        Volume = percent;
+        Sets++;
+        if (Log) { Console.WriteLine($"fake audio: volume -> {percent}"); }
+        return true;
+    }
+    public Boolean SetMuted(Boolean muted) { Muted = muted; if (Log) { Console.WriteLine($"fake audio: muted -> {muted}"); } return true; }
 }

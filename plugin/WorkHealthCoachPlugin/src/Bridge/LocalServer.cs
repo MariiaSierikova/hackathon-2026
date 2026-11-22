@@ -318,8 +318,101 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     return (400, "{\"error\":\"send {\\\"atDesk\\\":true|false}\"}");
                 }
 
-                PomodoroState.SetPresence(at.GetBoolean());
+                Presence.Set(at.GetBoolean());
                 return (200, Ok);
+            }
+
+            // ---- volume when far: distance without any camera code ----
+            //   POST /distance {"ratio":0.6}   face size relative to normal (1.0 = normal distance, 0.6 = 40 % smaller)
+            //   POST /distance {"face":0.11}   raw face width, needs /distance/calibrate first
+            //   POST /distance/calibrate       "this is my normal distance" (optional {"face":0.18}; default = the latest face)
+            //   GET  /distance                 state + the real system volume
+            if (path == "/distance" && method == "GET")
+            {
+                return (200, FarVolume.ToJson());
+            }
+
+            if (method == "POST" && path == "/distance")
+            {
+                using var doc = JsonDocument.Parse(body);
+                var r = doc.RootElement;
+                if (r.TryGetProperty("ratio", out var rv) && rv.TryGetDouble(out var ratio))
+                {
+                    FarVolume.SetRatio(ratio);
+                    return (200, Ok);
+                }
+
+                if (r.TryGetProperty("face", out var fv) && fv.TryGetDouble(out var face))
+                {
+                    return FarVolume.SetFace(face) ? (200, Ok) : (400, "{\"error\":\"no baseline yet: POST /distance/calibrate first\"}");
+                }
+
+                return (400, "{\"error\":\"send {\\\"ratio\\\":0.6} or {\\\"face\\\":0.11}\"}");
+            }
+
+            if (method == "POST" && path == "/distance/calibrate")
+            {
+                Double? face = null;
+                if (!String.IsNullOrWhiteSpace(body))
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("face", out var fv) && fv.TryGetDouble(out var f))
+                    {
+                        face = f;
+                    }
+                }
+
+                return FarVolume.Calibrate(face) ? (200, Ok) : (400, "{\"error\":\"no face width yet: send a sample first or pass {\\\"face\\\":0.18}\"}");
+            }
+
+            // ---- person behind: samples of a second face (no camera code here) ----
+            //   POST /behind {"id":2,"x":0.62,"size":0.07}   or   {"samples":[{...},{...}]}     POST /behind/clear     GET /behind
+            //   POST /behind/do/<hide|back|lock|music|talk|ok|snooze>      what the Actions Ring buttons do
+            if (path == "/behind" && method == "GET")
+            {
+                return (200, PersonBehind.ToJson());
+            }
+
+            if (method == "POST" && path == "/behind")
+            {
+                using var doc = JsonDocument.Parse(body);
+                var added = 0;
+                void One(JsonElement e)
+                {
+                    if (e.TryGetProperty("x", out var xv) && xv.TryGetDouble(out var x) && e.TryGetProperty("size", out var sv) && sv.TryGetDouble(out var size))
+                    {
+                        var id = e.TryGetProperty("id", out var iv) && iv.TryGetInt32(out var i) ? i : 0;
+                        PersonBehind.AddSample(id, x, size);
+                        added++;
+                    }
+                }
+
+                if (doc.RootElement.TryGetProperty("samples", out var arr) && arr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var e in arr.EnumerateArray())
+                    {
+                        One(e);
+                    }
+                }
+                else
+                {
+                    One(doc.RootElement);
+                }
+
+                return added > 0 ? (200, $"{{\"ok\":true,\"samples\":{added}}}") : (400, "{\"error\":\"send id, x and size\"}");
+            }
+
+            if (method == "POST" && path == "/behind/clear")
+            {
+                PersonBehind.Clear();
+                return (200, Ok);
+            }
+
+            if (method == "POST" && path.StartsWith("/behind/do/", StringComparison.Ordinal))
+            {
+                var action = path.Substring("/behind/do/".Length);
+                PluginLog.Info($"Person-behind action from the API: {action}");
+                return BehindResponse.Run(action) ? (200, PersonBehind.ToJson()) : (404, "{\"error\":\"unknown action\"}");
             }
 
             if (method == "POST" && path == "/trigger")
@@ -370,7 +463,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     // camera presence for the Pomodoro timer: /signal/presence/true (someone at the desk) | false
                     if (name == "presence")
                     {
-                        PomodoroState.SetPresence(on == true);
+                        Presence.Set(on == true);
                         return (200, Ok);
                     }
 
