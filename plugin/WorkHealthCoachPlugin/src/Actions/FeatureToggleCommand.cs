@@ -30,16 +30,26 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
             this.AddParameter("master", "Master switch", Group);
             this.AddParameter("present", "Presenting mode (silent)", Group);
+            this.AddParameter("alert", "Alert light (shows alerts, nothing else)", Group);
         }
 
         // Every key of this command is a "variation" (a parameter). The Logitech docs say ActionImageChanged() without a
         // parameter is for actions that have none; with parameters, say WHICH variation changed.
-        public static readonly String[] AllKeys = { "speed", "volume", "blink", "pomodoro", "distance", "behind", "master", "present" };
+        public static readonly String[] AllKeys = { "speed", "volume", "blink", "pomodoro", "distance", "behind", "master", "present", "alert" };
+
+        private System.Timers.Timer _blinker;
+        private Boolean _wasAlert;
 
         protected override Boolean OnLoad()
         {
             UiSettings.Changed += this.RedrawAll;
             PomodoroState.Changed += this.RedrawPomodoro;
+            SessionState.Changed += this.RedrawIfAlert;
+
+            // While an alert is showing, every Desk Coach key flashes the same alert; this timer animates it and puts the icons back afterwards.
+            this._blinker = new System.Timers.Timer(400) { AutoReset = true };
+            this._blinker.Elapsed += (_, _) => this.RedrawIfAlert();
+            this._blinker.Start();
             return true;
         }
 
@@ -47,7 +57,18 @@ namespace Loupedeck.WorkHealthCoachPlugin
         {
             UiSettings.Changed -= this.RedrawAll;
             PomodoroState.Changed -= this.RedrawPomodoro;
+            SessionState.Changed -= this.RedrawIfAlert;
+            this._blinker?.Stop();
+            this._blinker?.Dispose();
             return true;
+        }
+
+        private void RedrawIfAlert()
+        {
+            if (SessionState.TakeoverActive || this._wasAlert)
+            {
+                this.RedrawAll();
+            }
         }
 
         // A switch changed (page, key, profile, master): every key may look different, so refresh each one by name.
@@ -65,6 +86,14 @@ namespace Loupedeck.WorkHealthCoachPlugin
         protected override void RunCommand(String actionParameter)
         {
             PluginLog.Info($"Desk Coach key pressed: '{actionParameter}'");
+
+            // While an alert is showing on the keys, a press dismisses it (it must not flip a feature by accident).
+            if (SessionState.TakeoverActive)
+            {
+                SessionState.DismissAlert();
+                return;
+            }
+
             switch (actionParameter)
             {
                 case "master":
@@ -72,6 +101,8 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     break;
                 case "present":
                     UiSettings.TogglePresenting();
+                    break;
+                case "alert":
                     break;
                 default:
                     UiSettings.SetFeatureEnabled(actionParameter, !UiSettings.FeatureEnabled(actionParameter));
@@ -100,6 +131,18 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 }
 
                 var px = Render.Px(imageSize);
+                var alertImage = KeypadScreen.AlertKey(px);
+                this._wasAlert = alertImage != null;
+                if (alertImage != null)
+                {
+                    return alertImage;
+                }
+
+                if (actionParameter == "alert")
+                {
+                    return Render.Tile(px, "DESK COACH", "OK", Render.Ok, "no alert");
+                }
+
                 var on = IsOn(actionParameter);
                 PluginLog.Verbose($"Desk Coach key image: '{actionParameter}' {(on ? "ON" : "off")} {px}px");
                 var icon = PluginResources.ReadImage($"feat_{actionParameter}{(on ? String.Empty : "_off")}.png");
