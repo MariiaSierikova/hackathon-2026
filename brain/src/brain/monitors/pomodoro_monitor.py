@@ -79,19 +79,40 @@ def face_width(snap):
     return float(w) if isinstance(w, (int, float)) and w > 0 else None
 
 
-def observe(snap, margin=0.05):
-    """Snapshot -> (present, focused). gaze is null when there is no face OR no calibration, so presence also uses `face`."""
+def gaze_is_reliable(snap):
+    """False for the Gaze Tracker's own 'fallback' frames (poor estimate, can show coordinates far off the screen: x = -321 ...)."""
+    gaze = (snap or {}).get("gaze") or {}
+    if gaze.get("source") == "calibrated_legacy_fallback":
+        return False
+    return not ((snap or {}).get("geometry") or {}).get("rejection_reason")
+
+
+def observe(snap, margin=0.15):
+    """Snapshot -> (present, focused). gaze is null when there is no face OR no calibration, so presence also uses `face`.
+    focused is True (gaze on the screen, `margin` of its size beyond the edge still counts), False (gaze off the screen) or None (no reliable
+    gaze: the tracker's fallback frame; says nothing about where you look)."""
     if not snap:
         return False, False
     gaze, face = snap.get("gaze"), snap.get("face")
     present = bool(gaze) or bool(face and face.get("bounding_box_norm"))
-    focused = False
-    if gaze:
-        scr = snap.get("screen") or {}
-        w, h = scr.get("width_px") or 0, scr.get("height_px") or 0
-        if w and h:
-            focused = (-margin * w <= gaze["x_px"] <= (1 + margin) * w) and (-margin * h <= gaze["y_px"] <= (1 + margin) * h)
-    return present, focused
+    if not gaze:
+        return present, False
+    if not gaze_is_reliable(snap):
+        return present, None
+    scr = snap.get("screen") or {}
+    w, h = scr.get("width_px") or 0, scr.get("height_px") or 0
+    if not (w and h):
+        return present, False
+    return present, (-margin * w <= gaze["x_px"] <= (1 + margin) * w) and (-margin * h <= gaze["y_px"] <= (1 + margin) * h)
+
+
+def gaze_text(focused, snap=None):
+    """For the log: on screen / off screen / unreliable, with the real numbers when we have them."""
+    word = "unreliable" if focused is None else "on screen" if focused else "off screen"
+    g = (snap or {}).get("gaze")
+    if g:
+        word += f" ({g.get('x_px', 0):.0f},{g.get('y_px', 0):.0f} {str(g.get('source', '?'))[:4]})"
+    return word
 
 
 class FakeGaze:
@@ -125,6 +146,8 @@ def add_args(ap):
     ap.add_argument("--gaze-url", default="ws://127.0.0.1:8964")
     ap.add_argument("--remind-every", type=float, default=2.0, help="seconds between break_due messages while a break is due (--own-timer only)")
     ap.add_argument("--status-every", type=float, default=10.0, help="seconds between status lines (use 2 while testing)")
+    ap.add_argument("--focus-margin", type=float, default=0.15, help="a gaze point this fraction of the screen size beyond the edge still counts as looking at the screen")
+    ap.add_argument("--no-focus", action="store_true", help="ignore the gaze: only a missing FACE counts as away (use it if the gaze estimate is unreliable)")
     ap.add_argument("--no-distance", action="store_true", help="do not send the face size to the plugin's 'Volume when far' feature")
     ap.add_argument("--far-after", type=float, default=3.0, help="seconds without a face before 'out of the picture' counts as far away (the plugin then waits its own 'Act after')")
     ap.add_argument("--calibrate-distance", action="store_true", help="sit at your NORMAL distance: measures your face size for 4 s and tells the plugin 'this is my normal distance', then exit")
@@ -171,7 +194,9 @@ def run(a, stop, say=print):
                 continue
             warned = False
             snap = feed.latest if now - feed.latest_at < 3.0 else None      # stale data = nobody seen
-            present, focused = observe(snap)
+            present, focused = observe(snap, getattr(a, "focus_margin", 0.15))
+            if getattr(a, "no_focus", False) and present:
+                focused = True
             state = tracker.update(now, present, focused)
             if own:
                 STATUS["state"], STATUS["remaining"] = state, tracker.remaining_s()
@@ -232,10 +257,10 @@ def run(a, stop, say=print):
             if state != last_state:
                 if own:
                     say(f"[{now - t0:5.0f}s] {state.upper()}  (worked {tracker.worked:.0f}s, "
-                        f"{'face' if present else 'no face'}, {'on screen' if focused else 'off screen'})")
+                        f"{'face' if present else 'no face'}, gaze {gaze_text(focused, snap)})")
                 else:
                     say(f"[{now - t0:5.0f}s] {'AT THE DESK' if state != PAUSED else 'AWAY (not here / not looking)'} "
-                        f"({'face' if present else 'no face'}, {'on screen' if focused else 'off screen'}) -> plugin")
+                        f"({'face' if present else 'no face'}, gaze {gaze_text(focused, snap)}) -> plugin")
                 last_state = state
             if own and state == DUE and now - last_remind >= a.remind_every:
                 last_remind = now
@@ -251,7 +276,7 @@ def run(a, stop, say=print):
                 clock = (f"plugin clock: {STATUS['state']} {left // 60:02d}:{left % 60:02d}{raw}" if STATUS["state"]
                          else "plugin clock: not running (Pomodoro off, or the plugin does not answer)")
                 say(f"[{now - t0:5.0f}s] {'at desk' if state != PAUSED else 'AWAY'} | face {'yes' if present else 'NO'} | "
-                    f"gaze {'on screen' if focused else 'off screen'} | {clock}")
+                    f"gaze {gaze_text(focused, snap)} | {clock}")
             if own and now - last_status >= 10 and state != DUE:
                 last_status = now
                 say(f"[{now - t0:5.0f}s] {state}: {tracker.remaining_s() / 60:.1f} min of work left"
