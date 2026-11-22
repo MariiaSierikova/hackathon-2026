@@ -192,6 +192,13 @@ def run(a, stop, say=print):
             if own and tracker.break_taken:
                 say(f"[{now - t0:5.0f}s] break taken -> clock restarted")
                 coach.trigger(LOOKAWAY_DONE, 1.0, force=a.force)
+            if not own and now - last_status >= 10:                                  # a heartbeat, so a quiet log does not look like a dead one
+                last_status = now
+                left = int(STATUS["remaining"])
+                clock = (f"plugin clock: {STATUS['state']} {left // 60:02d}:{left % 60:02d}" if STATUS["state"]
+                         else "plugin clock: not running (Pomodoro off, or the plugin does not answer)")
+                say(f"[{now - t0:5.0f}s] {'at desk' if state != PAUSED else 'AWAY'} | face {'yes' if present else 'NO'} | "
+                    f"gaze {'on screen' if focused else 'off screen'} | {clock}")
             if own and now - last_status >= 10 and state != DUE:
                 last_status = now
                 say(f"[{now - t0:5.0f}s] {state}: {tracker.remaining_s() / 60:.1f} min of work left"
