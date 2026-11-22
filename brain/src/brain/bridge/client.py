@@ -80,6 +80,18 @@ class CoachClient:
     def wpm(self, words_per_minute):
         return self._put("/metrics", {"wpm": float(words_per_minute)})
 
+    def behind(self, samples):
+        """Samples of OTHER faces for the plugin's person-behind logic: [{"id":2,"x":0.62,"size":0.07}, ...]. Send a few times a second while
+        someone is there; stop sending when nobody is."""
+        if not samples:
+            return False
+        return self._put("/behind", {"samples": list(samples)})
+
+    def distance(self, face=None, ratio=None):
+        """Face width (needs the plugin's baseline) or a ready ratio (face size vs normal) for the volume-when-far feature. Keep sending: stale after 5 s."""
+        body = {"face": float(face)} if face is not None else {"ratio": float(ratio)}
+        return self._put("/distance", body)
+
     def get_json(self, path, timeout_s=0.4):
         """GET a JSON answer from the plugin (blocking, short timeout). None if the plugin does not answer."""
         try:
@@ -89,10 +101,11 @@ class CoachClient:
             self.last_error = e
             return None
 
-    def post_json(self, path, timeout_s=1.0):
-        """Blocking POST with an empty body. Returns the JSON answer, or None if the plugin does not answer."""
+    def post_json(self, path, timeout_s=1.0, body=None):
+        """Blocking POST (empty body, or `body` as JSON). Returns the JSON answer, or None if the plugin does not answer or says no."""
         try:
-            req = urllib.request.Request(self.base + path, data=b"", method="POST", headers={"Content-Type": "application/json"})
+            data = json.dumps(body).encode() if body is not None else b""
+            req = urllib.request.Request(self.base + path, data=data, method="POST", headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=timeout_s) as r:
                 return json.loads(r.read() or b"{}")
         except Exception as e:
