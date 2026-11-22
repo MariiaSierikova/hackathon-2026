@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws the pixel-art sprites (eye, snail, owl) and writes:
+"""Draws the pixel-art sprites (eye, snail, owl, duck) and writes:
    assets/sprites.json                      (source of truth, used by the on-screen overlay)
    plugin/.../Ui/SpriteData.g.cs            (same data compiled into the Logi plugin)
    assets/sprites_preview.png               (contact sheet to look at)
@@ -173,10 +173,44 @@ def owl(o):
     return g.rows()
 
 
+# ---------------------------------------------------------------- duck (speak up!)
+DUCK_PAL = {"k": (70, 50, 30), "y": (255, 214, 64), "Y": (238, 176, 40), "o": (255, 138, 40), "d": (30, 25, 45),
+            "w": (255, 255, 255), "p": (255, 150, 170), "m": (150, 40, 55)}
+
+
+def duck(open_mouth):
+    W, H = 40, 36
+    g = Grid(W, H)
+    g.ellipse(14, 25, 12.5, 8.5, "y")                     # body
+    for i in range(6):                                    # tail feathers (left)
+        for j in range(6 - i):
+            g.set(2 + j, 17 + i, "y")
+    g.ellipse(23, 12, 8.5, 8.5, "y")                      # head
+    g.ellipse(13, 26, 6.5, 4.0, "Y")                      # wing
+    g.set(23, 4, "y"); g.set(24, 3, "y"); g.set(22, 3, "y")   # little head tuft
+    g.set(24, 10, "d"); g.set(25, 10, "d"); g.set(24, 11, "d"); g.set(25, 11, "d")   # eye
+    g.set(24, 10, "w")
+    g.ellipse(22.5, 14.5, 1.7, 1.1, "p")                  # blush
+    if open_mouth:
+        g.ellipse(33.5, 11.5, 5, 1.8, "o")                # upper beak
+        g.ellipse(32.5, 17.0, 4.2, 1.7, "o")              # lower beak
+        for x in range(29, 36):
+            for y in range(13, 16):
+                g.set(x, y, "m")                          # open mouth
+    else:
+        g.ellipse(33.0, 14.5, 5, 2.4, "o")                # closed beak
+    for fx in (9, 17):                                    # feet
+        g.line(fx, 32, fx, 34, "o", 1)
+        g.line(fx - 2, 34, fx + 2, 34, "o", 2)
+    g.outline("k", 1)
+    return g.rows()
+
+
 SPRITES = {
     "eye": {"palette": EYE_PAL, "frames": {"open": eye(1.0), "half": eye(0.5), "closed": eye(0.0)}},
     "snail": {"palette": SNAIL_PAL, "frames": {"a": snail(0), "b": snail(1)}},
     "owl": {"palette": OWL_PAL, "frames": {"open": owl(1.0), "closed": owl(0.0)}},
+    "duck": {"palette": DUCK_PAL, "frames": {"closed": duck(False), "open": duck(True)}},
 }
 
 

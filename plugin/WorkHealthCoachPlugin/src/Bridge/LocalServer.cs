@@ -366,7 +366,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
     // Every trigger name the plugin accepts.
     public static class Triggers
     {
-        public static readonly String[] Controls = { "blink_detected", "pace_ok" };
+        public static readonly String[] Controls = { "blink_detected", "pace_ok", "speak_ok" };
 
         public static IEnumerable<String> All => HapticPlayer.PatternNames.Concat(Controls);
 
@@ -380,6 +380,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
         {
             "pace_too_fast" => "pace_ok",
             "blink_low" => "blink_detected",
+            "speak_up" => "speak_ok",
             _ => null,
         };
     }

@@ -52,6 +52,9 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 case "pace_ok":
                     SessionState.ClearPaceAlert();
                     break;
+                case "speak_ok":
+                    SessionState.ClearSpeakAlert();
+                    break;
                 default:
                     NotificationPolicy.Evaluate(m);
                     break;
