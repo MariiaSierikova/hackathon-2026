@@ -32,12 +32,17 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
             // Haptics subscribe to triggers. Keypad widgets and the notification policy plug in here later.
             NotificationPolicy.Init();
+            UiSettings.Init();
             TriggerBus.Received += OnRaw;                              // raw trigger -> (controls) or policy
             NotificationPolicy.Decided += OnDecided;                  // policy -> outputs
             this._server.Start();
 
             this._tick = new System.Timers.Timer(1000) { AutoReset = true };
-            this._tick.Elapsed += (_, _) => SessionState.Tick();
+            this._tick.Elapsed += (_, _) =>
+            {
+                SessionState.Tick();
+                PomodoroState.Tick();
+            };
             this._tick.Start();
         }
 
@@ -65,7 +70,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
         {
             if (d.Visual)
             {
-                SessionState.OnTrigger(d.Message);
+                SessionState.OnTrigger(d.Message, d.Rule);
             }
 
             if (d.Overlay)
@@ -75,7 +80,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
             if (d.Haptic)
             {
-                HapticPlayer.Play(d.Message.Trigger, d.HapticStrength);
+                HapticPlayer.Play(d.Message.Trigger, d.HapticStrength, d.Rule?.HapticPattern, d.Rule?.HapticRepeat ?? 1);
             }
         }
 

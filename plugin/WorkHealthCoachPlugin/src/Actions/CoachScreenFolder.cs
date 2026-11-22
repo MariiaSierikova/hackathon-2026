@@ -98,6 +98,25 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 return;
             }
 
+            if (PomodoroState.Active)
+            {
+                // Pomodoro view: bottom row = reset / play-pause / skip, anywhere else = play-pause.
+                switch (key)
+                {
+                    case "20":
+                        PomodoroState.Reset();
+                        break;
+                    case "22":
+                        PomodoroState.Skip();
+                        break;
+                    default:
+                        PomodoroState.TogglePause();
+                        break;
+                }
+
+                return;
+            }
+
             switch (key)
             {
                 case "10":

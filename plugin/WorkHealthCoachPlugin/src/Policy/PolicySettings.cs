@@ -18,6 +18,16 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public Int32 CooldownSec { get; set; } = 60;      // minimum time between alerts
         public Int32 HapticAfterSec { get; set; }         // escalation: visual first, mouse only if it persists this long
         public Int32 MaxPer10Min { get; set; } = 4;       // alert budget
+
+        // ---- chosen in the settings page (all optional; null/false = the trigger's built-in behaviour) ----
+        public String HapticPattern { get; set; }          // tap | bump | alert | jingle (null = built-in pattern)
+        public Int32 HapticRepeat { get; set; } = 1;       // 1..3
+        public String KeypadColor { get; set; }            // "#rrggbb" for the full-Keypad reminder (null = default)
+        public Boolean Audio { get; set; }                 // sound channel (played by the app/overlay side, not the plugin)
+        public String Sound { get; set; }
+        public String ScreenStyle { get; set; }            // popup | banner | edge
+        public String ScreenText { get; set; }
+        public String ScreenText2 { get; set; }
     }
 
     public class PolicySettings
@@ -26,6 +36,9 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public String HapticStrength { get; set; } = "normal";     // off | light | normal | strong
         public Int32 TotalMinutes { get; set; } = 20;
         public Int32 WarnMinutes { get; set; } = 1;
+        public Boolean Master { get; set; } = true;                // master switch: off = nothing reaches the user
+        public String Profile { get; set; } = "everyday";          // settings-page profile (everyday | presenting | focus | meeting | custom)
+        public List<String> Muted { get; set; } = new();           // channels silenced by the profile: audio | screen | haptic | keypad
         public Dictionary<String, TriggerRule> Triggers { get; set; } = new();
 
         private static readonly JsonSerializerOptions Json = new()
@@ -39,8 +52,12 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public static readonly String[] Presets = { "quiet", "balanced", "attentive" };
         public static readonly String[] Strengths = { "off", "light", "normal", "strong" };
 
-        public static String FilePath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WorkHealthCoach", "settings.json");
+        // WORKHEALTH_DATA_DIR overrides the folder (tests/harness); normally ~/Library/Application Support/WorkHealthCoach or %APPDATA%\WorkHealthCoach.
+        public static String DataDir => Environment.GetEnvironmentVariable("WORKHEALTH_DATA_DIR") is { Length: > 0 } d
+            ? d
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WorkHealthCoach");
+
+        public static String FilePath => Path.Combine(DataDir, "settings.json");
 
         // Balanced baseline for every trigger.
         private static Dictionary<String, TriggerRule> Baseline() => new()
@@ -55,6 +72,12 @@ namespace Loupedeck.WorkHealthCoachPlugin
             ["break_due"]        = new TriggerRule { MinSeverity = 0.5, CooldownSec = 180, HapticAfterSec = 5,  MaxPer10Min = 3 },
             ["person_behind"]    = new TriggerRule { MinSeverity = 0.5, CooldownSec = 20,  HapticAfterSec = 0,  MaxPer10Min = 6, Critical = true },
             ["test_blink"]       = new TriggerRule { MinSeverity = 0.0, CooldownSec = 0,   HapticAfterSec = 0,  MaxPer10Min = 999 },
+            // added with the settings page (team table 2026-11-21)
+            ["speak_up"]         = new TriggerRule { MinSeverity = 0.5, CooldownSec = 30,  HapticAfterSec = 0,  MaxPer10Min = 6 },
+            ["speak_down"]       = new TriggerRule { MinSeverity = 0.5, CooldownSec = 30,  HapticAfterSec = 0,  MaxPer10Min = 6 },
+            ["break_due"]        = new TriggerRule { MinSeverity = 0.0, CooldownSec = 0,   HapticAfterSec = 0,  MaxPer10Min = 30 },
+            ["break_over"]       = new TriggerRule { MinSeverity = 0.0, CooldownSec = 0,   HapticAfterSec = 0,  MaxPer10Min = 30 },
+            ["volume_far"]       = new TriggerRule { MinSeverity = 0.0, CooldownSec = 0,   HapticAfterSec = 0,  MaxPer10Min = 999, Haptic = false, Visual = false, Overlay = false },
         };
 
         // Quiet = only what really matters; Attentive = more frequent coaching.

@@ -30,6 +30,12 @@
     <PackageReference Include="LogiPluginApi" Version="6.*" ExcludeAssets="runtime;native" />
   </ItemGroup>
 
+  <!-- Settings page (served by LocalServer at http://127.0.0.1:8787/) and the Keypad key icons, embedded in the DLL -->
+  <ItemGroup>
+    <EmbeddedResource Include="Web\**\*" LogicalName="web/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\feat_*.png" />
+  </ItemGroup>
+
   <Target Name="CopyPackage" AfterTargets="PostBuildEvent">
     <Message Text="📦 Copying package files..." Importance="High" />
     <ItemGroup>
@@ -39,7 +45,8 @@
     <Message Text="✅ Package files copied to $(OutputPath)..\" Importance="High" />
   </Target>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <!-- dotnet build -p:LinkPlugin=false  compiles without linking/reloading the plugin in Options+ (tests, CI) -->
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(LinkPlugin)' != 'false'">
     <Exec Condition="$(OS) == 'Windows_NT'" Command="echo $(BaseOutputPath)$(Configuration)\ &gt; &quot;$(PluginDir)$(ProjectName).link&quot;" />
     <Exec Condition="$(OS) != 'Windows_NT'" Command="echo $(BaseOutputPath)$(Configuration)\ &gt; $(PluginDir)$(ProjectName).link" />
     <Message Text="🔨 Created plugin link at: $(PluginDir)$(ProjectName).link" Importance="High" />

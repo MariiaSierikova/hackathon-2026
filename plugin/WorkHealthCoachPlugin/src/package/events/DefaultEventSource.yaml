@@ -16,3 +16,15 @@ events:
     - name: pulseDone
       displayName: Done pulse
       description: Task completed (20-20-20 break finished)
+    - name: hapticTap
+      displayName: Tap
+      description: Short, crisp pulse (settings page choice)
+    - name: hapticBump
+      displayName: Bump
+      description: Soft impact (settings page choice)
+    - name: hapticAlert
+      displayName: Alert
+      description: Attention-grabbing pattern (settings page choice)
+    - name: hapticJingle
+      displayName: Jingle
+      description: Friendly, musical pattern (settings page choice)

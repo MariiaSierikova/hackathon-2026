@@ -23,18 +23,22 @@ namespace Loupedeck.WorkHealthCoachPlugin
         {
             _timer = new System.Threading.Timer(_ => Pulse(), null, 200, 150);
             SessionState.Changed += () => Changed?.Invoke();
+            PomodoroState.Changed += Forward;
         }
 
         public static void Stop()
         {
             _timer?.Dispose();
             _timer = null;
+            PomodoroState.Changed -= Forward;
         }
+
+        private static void Forward() => Changed?.Invoke();
 
         private static void Pulse()
         {
             var animating = SessionState.TakeoverActive;
-            var second = (Int32)SessionState.Elapsed.TotalSeconds;
+            var second = PomodoroState.Active ? PomodoroState.LeftSec : (Int32)SessionState.Elapsed.TotalSeconds;
             if (animating || second != _lastSecond)
             {
                 _lastSecond = second;
@@ -52,6 +56,11 @@ namespace Loupedeck.WorkHealthCoachPlugin
             if (SessionState.TimeAlertActive)
             {
                 return TimeWarning();
+            }
+
+            if (SessionState.GenericActive)
+            {
+                return Generic();
             }
 
             if (SessionState.EyeAlertActive)
@@ -118,8 +127,72 @@ namespace Loupedeck.WorkHealthCoachPlugin
         }
 
         // ------------------------------------------------------------ idle control panel
+        private static PixelScene Generic()
+        {
+            var (r, g, b) = SessionState.GenericColor;
+            var flash = (DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond / 500 % 2) == 0;
+            var s = new PixelScene(flash ? new BitmapColor(r, g, b) : new BitmapColor((Int32)(r * 0.65), (Int32)(g * 0.65), (Int32)(b * 0.65)));
+            var lines = SessionState.GenericLines;
+            if (lines.Length > 0)
+            {
+                s.TextCentered(lines[0], lines.Length > 1 ? 80 : 150, 12, White);
+            }
+
+            if (lines.Length > 1)
+            {
+                s.TextCentered(lines[1], 190, 12, White);
+            }
+
+            return s;
+        }
+
+        // Pomodoro timer in the same layout as the idle screen: label on top, huge MM:SS, reset / play-pause / skip below.
+        private static PixelScene PomodoroIdle()
+        {
+            var s = new PixelScene(Dark);
+            var work = PomodoroState.Current == PomodoroState.Phase.Work;
+            var away = work && PomodoroState.UsePresence && !PomodoroState.AtDesk;
+            var name = work ? $"FOCUS {PomodoroState.Round} OF {PomodoroState.Rounds}"
+                : PomodoroState.Current == PomodoroState.Phase.Long ? "LONG BREAK" : "SHORT BREAK";
+            var state = away ? "AWAY" : !PomodoroState.Running ? "PAUSED" : work ? "AT DESK" : "REST";
+            var grey = new BitmapColor(120, 130, 150);
+            var color = away || !PomodoroState.Running ? grey
+                : work ? (PomodoroState.LeftSec <= 60 ? new BitmapColor(245, 180, 60) : new BitmapColor(240, 110, 100))
+                : new BitmapColor(110, 215, 150);
+
+            s.Text(name, 14, 14, 5, new BitmapColor(130, 150, 190));
+            s.Text(state, 14, 58, 7, color);
+            s.TextCentered(Render.Mmss(TimeSpan.FromSeconds(Math.Max(0, PomodoroState.LeftSec))), 124, 20, color);
+
+            for (var i = 0; i < 3; i++)
+            {
+                s.Rect(i * 116 + 8, 232 + 8, 100, 100, Panel);
+            }
+
+            var icon = new BitmapColor(235, 240, 250);
+            s.Text("RESET", 58 - PixelScene.TextWidth("RESET", 4) / 2, 280, 4, icon);
+            if (PomodoroState.Running)
+            {
+                s.Rect(116 + 58 - 22, 290 - 30, 14, 60, icon);
+                s.Rect(116 + 58 + 8, 290 - 30, 14, 60, icon);
+            }
+            else
+            {
+                Arrow(s, 116 + 58 + 4, 290, left: false, new BitmapColor(110, 215, 150));
+            }
+
+            Arrow(s, 232 + 58 - 8, 290, left: false, icon);
+            s.Rect(232 + 58 + 26, 290 - 30, 8, 60, icon);
+            return s;
+        }
+
         private static PixelScene Idle()
         {
+            if (PomodoroState.Active)
+            {
+                return PomodoroIdle();
+            }
+
             var s = new PixelScene(Dark);
 
             // top row: slide + pace
