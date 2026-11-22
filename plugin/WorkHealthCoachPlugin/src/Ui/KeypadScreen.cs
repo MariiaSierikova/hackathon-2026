@@ -76,83 +76,38 @@ namespace Loupedeck.WorkHealthCoachPlugin
             return Idle();
         }
 
-        // ------------------------------------------------------------ one key of the alert
-        // The Desk Coach widget keys (feature toggles, or the Alert light) do not know where they sit on the Keypad, so while an alert
-        // is active EVERY one of them draws the same small, readable alert. Returns null when no alert is active.
-        public static BitmapImage AlertKey(Int32 px)
+        // ------------------------------------------------------------ the alert across the widget keys
+        // The Desk Coach widget keys do not know where they sit on the Keypad, so each widget has a FIXED cell of the 3x3 picture
+        // (FeatureToggleCommand.Cells). Put the keys in that order and an alert becomes ONE picture over all nine keys, the same scene the
+        // Coach screen folder shows. All nine tiles are cut from one snapshot (cached for 150 ms) so the flashing stays in step.
+        private static PixelScene _alertScene;
+        private static String _alertKey;
+        private static readonly Object AlertGate = new();
+
+        // Tile (row, col) of the current alert scene scaled to px, or null when no alert is active.
+        public static BitmapImage AlertTile(Int32 row, Int32 col, Int32 px)
         {
             if (!SessionState.TakeoverActive)
             {
                 return null;
             }
 
-            const Int32 canvas = 116;
-            var flash = (DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond / 400 % 2) == 0;
-            PixelScene s;
-            if (SessionState.BehindActive)
+            PixelScene scene;
+            lock (AlertGate)
             {
-                s = new PixelScene(flash ? new BitmapColor(190, 40, 40) : new BitmapColor(120, 24, 24), canvas);
-                Lines(s, new[] { "SOMEONE", "BEHIND", "YOU" }, White);
-            }
-            else if (SessionState.TimeAlertActive)
-            {
-                s = new PixelScene(flash ? new BitmapColor(170, 40, 40) : new BitmapColor(110, 24, 24), canvas);
-                Lines(s, new[] { "TIME", Render.Mmss(SessionState.Remaining < TimeSpan.Zero ? TimeSpan.Zero : SessionState.Remaining), "LEFT" }, White);
-            }
-            else if (SessionState.GenericActive)
-            {
-                var (r, g, b) = SessionState.GenericColor;
-                s = new PixelScene(flash ? new BitmapColor(r, g, b) : new BitmapColor((Int32)(r * 0.65), (Int32)(g * 0.65), (Int32)(b * 0.65)), canvas);
-                Lines(s, SessionState.GenericLines, White);
-            }
-            else if (SessionState.EyeAlertActive)
-            {
-                s = new PixelScene(Cream, canvas);
-                var ms = (Int32)((DateTime.UtcNow - SessionState.EyeAlertStart).TotalMilliseconds % 1800);
-                var frame = ms < 1000 ? "open" : ms < 1130 ? "half" : ms < 1330 ? "closed" : ms < 1460 ? "half" : "open";
-                s.Sprite("eye", frame, (canvas - PixelScene.SpriteWidth("eye", "open") * 2) / 2, 10, 2);
-                s.TextCentered("BLINK!", 86, 3, InkSoft);
-            }
-            else
-            {
-                s = new PixelScene(Mint, canvas);
-                var f = (Int32)(DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond / 450 % 2) == 0 ? "a" : "b";
-                s.Sprite("snail", f, (canvas - PixelScene.SpriteWidth("snail", "a") * 2) / 2, 4, 2);
-                s.TextCentered("SLOW", 62, 3, InkSoft);
-                s.TextCentered("DOWN", 84, 3, InkSoft);
-            }
-
-            return s.Whole(px);
-        }
-
-        // Centres up to four short lines on a 116 px key; the text scale shrinks until the widest line fits.
-        private static void Lines(PixelScene s, String[] lines, BitmapColor color)
-        {
-            if (lines == null || lines.Length == 0)
-            {
-                return;
-            }
-
-            var n = Math.Min(4, lines.Length);
-            var maxScale = n == 1 ? 5 : n == 2 ? 4 : n == 3 ? 4 : 2;
-            var scale = maxScale;
-            for (var i = 0; i < n; i++)
-            {
-                while (scale > 1 && PixelScene.TextWidth(lines[i], scale) > s.Size - 8)
+                // a new snapshot every 150 ms, and at once when a different alert takes over
+                var key = $"{DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond / 150}|{(SessionState.BehindActive ? 1 : 0)}{(SessionState.TimeAlertActive ? 1 : 0)}"
+                    + $"{(SessionState.GenericActive ? 1 : 0)}{(SessionState.EyeAlertActive ? 1 : 0)}{(SessionState.PaceAlertActive ? 1 : 0)}|{String.Join(",", SessionState.GenericLines)}";
+                if (_alertScene == null || key != _alertKey)
                 {
-                    scale--;
+                    _alertScene = Build();
+                    _alertKey = key;
                 }
+
+                scene = _alertScene;
             }
 
-            var lineH = 5 * scale;
-            var gap = scale * 2;
-            var total = (n * lineH) + ((n - 1) * gap);
-            var y = Math.Max(2, (s.Size - total) / 2);
-            for (var i = 0; i < n; i++)
-            {
-                s.TextCentered(lines[i], y, scale, color);
-                y += lineH + gap;
-            }
+            return scene.Tile(row, col, px);
         }
 
         // ------------------------------------------------------------ takeover scenes

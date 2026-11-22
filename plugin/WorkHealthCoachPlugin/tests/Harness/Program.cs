@@ -46,8 +46,19 @@ if (args.Length == 2 && args[0] == "--render")
     // one Desk Coach widget key while an alert is active (every widget key draws this)
     void SaveKey(String name)
     {
-        var img = KeypadScreen.AlertKey(116);
-        Console.WriteLine($"{name}: {(img == null ? "NO ALERT" : img.SaveToFile(Path.Combine(args[1], name + ".png")))}");
+        foreach (var (id, cell) in FeatureToggleCommand.Cells)
+        {
+            var img = KeypadScreen.AlertTile(cell.Row, cell.Col, 116);
+            if (img == null)
+            {
+                Console.WriteLine($"{name}: NO ALERT");
+                return;
+            }
+
+            img.SaveToFile(Path.Combine(args[1], $"{name}_r{cell.Row}c{cell.Col}.png"));
+        }
+
+        Console.WriteLine($"{name}: 9 tiles");
     }
 
     SessionState.DismissAlert();
@@ -661,15 +672,16 @@ try
     SessionState.OnTrigger(new TriggerMessage("break_due", 1.0), new TriggerRule { KeypadColor = "#123456" });
     Check("generic reminder scene draws", SessionState.GenericActive && KeypadScreen.Build().Tile(0, 0, 116) != null);
     SessionState.DismissAlert();
-    Check("widget keys draw nothing special without an alert", KeypadScreen.AlertKey(116) == null);
+    Check("widget keys draw nothing special without an alert", KeypadScreen.AlertTile(0, 0, 116) == null);
+    Check("every widget has its own cell of the 3x3 picture", FeatureToggleCommand.Cells.Count == 9 && FeatureToggleCommand.Cells.Values.Distinct().Count() == 9 && FeatureToggleCommand.AllKeys.All(FeatureToggleCommand.Cells.ContainsKey));
     foreach (var t in new[] { "person_behind", "break_due", "speak_up", "blink_low", "pace_too_fast", "time_warning" })
     {
         SessionState.OnTrigger(new TriggerMessage(t, 1.0));
-        Check($"widget keys draw the alert for {t}", KeypadScreen.AlertKey(116) != null && KeypadScreen.AlertKey(80) != null);
+        Check($"all nine widget keys draw their tile of the alert for {t}", FeatureToggleCommand.Cells.Values.All(c => KeypadScreen.AlertTile(c.Row, c.Col, 116) != null && KeypadScreen.AlertTile(c.Row, c.Col, 80) != null));
         SessionState.DismissAlert();
     }
 
-    Check("a dismissed alert leaves the widget keys alone", !SessionState.TakeoverActive && KeypadScreen.AlertKey(116) == null);
+    Check("a dismissed alert leaves the widget keys alone", !SessionState.TakeoverActive && KeypadScreen.AlertTile(1, 1, 116) == null);
 }
 catch (Exception ex)
 {
