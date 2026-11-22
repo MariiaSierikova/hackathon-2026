@@ -17,7 +17,13 @@ namespace Loupedeck.WorkHealthCoachPlugin
         public const String Knock = "pulseKnock";
         public const String Done = "pulseDone";
 
-        private record Step(String Pulse, Int32 DelayAfterMs);
+        // The four patterns offered in the settings page (see eventMapping.yaml for the MX Master 4 waveforms).
+        public const String Tap = "hapticTap";
+        public const String Bump = "hapticBump";
+        public const String AlertWave = "hapticAlert";
+        public const String Jingle = "hapticJingle";
+
+        public record Step(String Pulse, Int32 DelayAfterMs);
 
         // Pattern name = trigger name from docs/DESIGN.md.
         private static readonly Dictionary<String, Step[]> Patterns = new()
@@ -32,7 +38,22 @@ namespace Loupedeck.WorkHealthCoachPlugin
             ["break_due"]        = new[] { new Step(Soft, 300), new Step(Soft, 300), new Step(Soft, 0) },
             ["test_blink"]       = new[] { new Step(Soft, 0) },   // development only: one soft tap per detected blink
             ["person_behind"]    = new[] { new Step(Knock, 350), new Step(Knock, 0) },
+            // speak_up and break_due come from the team (speak_up: crisp + soft tap, break_due: soft x3), see above
+            ["speak_down"]       = new[] { new Step(Calm, 0) },
+            ["break_over"]       = new[] { new Step(Sharp, 0) },
+            ["volume_far"]       = new[] { new Step(Soft, 0) },
         };
+
+        // User-chosen patterns (settings page): name -> pulses.
+        private static readonly Dictionary<String, Step[]> Choices = new()
+        {
+            ["tap"]    = new[] { new Step(Tap, 0) },
+            ["bump"]   = new[] { new Step(Bump, 0) },
+            ["alert"]  = new[] { new Step(AlertWave, 0) },
+            ["jingle"] = new[] { new Step(Jingle, 0) },
+        };
+
+        public static IEnumerable<String> ChoiceNames => Choices.Keys;
 
         private static Plugin _plugin;
         private static CancellationTokenSource _cts;
@@ -49,6 +70,10 @@ namespace Loupedeck.WorkHealthCoachPlugin
             plugin.PluginEvents.AddEvent(Sharp, "Sharp pulse", "Crisp tap");
             plugin.PluginEvents.AddEvent(Knock, "Knock", "Knocking pattern");
             plugin.PluginEvents.AddEvent(Done, "Done pulse", "Task completed");
+            plugin.PluginEvents.AddEvent(Tap, "Tap", "Short, crisp pulse");
+            plugin.PluginEvents.AddEvent(Bump, "Bump", "Soft impact");
+            plugin.PluginEvents.AddEvent(AlertWave, "Alert", "Attention-grabbing pattern");
+            plugin.PluginEvents.AddEvent(Jingle, "Jingle", "Friendly, musical pattern");
         }
 
         // light = just the first tap; normal = the pattern; strong = the pattern twice.
@@ -62,15 +87,44 @@ namespace Loupedeck.WorkHealthCoachPlugin
             _ => steps,
         };
 
-        public static void Play(String patternName, String strength = "normal")
+        // choice = one of tap | bump | alert | jingle chosen in the settings page (null = the trigger's built-in pattern); repeat = 1..3.
+        public static Step[] Resolve(String patternName, String strength, String choice, Int32 repeat)
         {
-            if (_plugin == null || !Patterns.TryGetValue(patternName, out var steps))
+            if (!String.IsNullOrEmpty(choice) && Choices.TryGetValue(choice, out var picked))
             {
-                PluginLog.Warning($"HapticPlayer: unknown pattern '{patternName}' or not initialised");
+                var once = strength switch
+                {
+                    "off" => Array.Empty<Step>(),
+                    "strong" => picked.Take(picked.Length - 1).Concat(new[] { new Step(picked[^1].Pulse, 300) }).Concat(picked).ToArray(),
+                    _ => picked,
+                };
+                var all = new List<Step>();
+                for (var i = 0; i < Math.Clamp(repeat, 1, 3); i++)
+                {
+                    all.AddRange(once.Select((s, idx) => idx == once.Length - 1 && i < Math.Clamp(repeat, 1, 3) - 1 ? new Step(s.Pulse, 300) : s));
+                }
+
+                return all.ToArray();
+            }
+
+            return Patterns.TryGetValue(patternName, out var steps) ? Scale(steps, strength) : null;
+        }
+
+        public static void Play(String patternName, String strength = "normal", String choice = null, Int32 repeat = 1)
+        {
+            if (_plugin == null)
+            {
+                PluginLog.Warning($"HapticPlayer: not initialised, cannot play '{patternName}'");
                 return;
             }
 
-            steps = Scale(steps, strength);
+            var steps = Resolve(patternName, strength, choice, repeat);
+            if (steps == null)
+            {
+                PluginLog.Warning($"HapticPlayer: unknown pattern '{patternName}'");
+                return;
+            }
+
             if (steps.Length == 0)
             {
                 return;

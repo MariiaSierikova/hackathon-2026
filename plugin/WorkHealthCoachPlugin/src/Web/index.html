@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desk Coach</title>
+<style>
+:root{
+  --bg:#f2f4f7;--panel:#fff;--panel2:#f6f8fb;--line:#e3e7ee;--text:#151a24;--muted:#667085;
+  --accent:#00b89c;--accent-ink:#06352d;--accent-soft:#d9f5ef;--danger:#e5484d;--warn:#f5a524;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 14px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1218;--panel:#181c25;--panel2:#1f2430;--line:#2a303d;--text:#eef1f6;--muted:#98a1b3;
+    --accent:#19d3b5;--accent-ink:#04201b;--accent-soft:#12312c;--shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1218;--panel:#181c25;--panel2:#1f2430;--line:#2a303d;--text:#eef1f6;--muted:#98a1b3;
+  --accent:#19d3b5;--accent-ink:#04201b;--accent-soft:#12312c;--shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+img.px{image-rendering:pixelated;display:block}
+.app{display:grid;grid-template-columns:210px minmax(0,1fr) 290px;height:100vh}
+.side{background:var(--panel);border-right:1px solid var(--line);padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 16px;font-weight:700;font-size:16px}
+.brand img{width:30px;height:30px}
+.nav{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;border:0;background:none;text-align:left;color:var(--muted);font-weight:600;width:100%}
+.nav:hover{background:var(--panel2);color:var(--text)}
+.nav.on{background:var(--accent-soft);color:var(--text)}
+.nav svg{width:18px;height:18px;flex:none}
+.side .sp{flex:1}
+.theme{font-size:12px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+main{overflow:auto;padding:26px 28px 60px}
+.rail{background:var(--panel);border-left:1px solid var(--line);padding:18px 16px;overflow:auto}
+h1{font-size:24px;margin:0 0 2px;letter-spacing:-.01em}
+h2{font-size:15px;margin:0}
+.sub{color:var(--muted);margin:0 0 18px}
+.top{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.top .grow{flex:1;min-width:240px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block}
+.chip.warn i{background:var(--warn)}
+.note{background:var(--panel2);border:1px dashed var(--line);border-radius:10px;padding:8px 12px;color:var(--muted);font-size:12.5px;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px;transition:opacity .2s}
+.card.off .ico{filter:grayscale(1) opacity(.55)}
+.card.off .chs{opacity:.5}
+.card .head{display:flex;gap:12px;align-items:center}
+.card .ico{width:48px;height:48px;background:var(--panel2);border-radius:12px;padding:4px;border:1px solid var(--line)}
+.card .ico img{width:100%;height:100%}
+.card .ttl{flex:1;min-width:0}
+.card .ttl b{display:block;font-size:15px}
+.card .ttl span{color:var(--muted);font-size:12.5px}
+.sum{color:var(--muted);font-size:12.5px}
+.chs{display:flex;gap:8px;align-items:center}
+.chb{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);display:grid;place-items:center;color:var(--muted)}
+.chb svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.chb.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chb:hover{border-color:var(--accent)}
+.cardfoot{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.btn{border:1px solid var(--line);background:var(--panel2);padding:7px 14px;border-radius:10px;font-weight:600}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.sm{padding:4px 10px;font-size:12.5px}
+.btn.ghost{background:none}
+.btn.danger{color:var(--danger)}
+.sw{width:42px;height:24px;border-radius:999px;border:0;background:var(--line);position:relative;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .15s}
+.sw[aria-checked="true"]{background:var(--accent)}
+.sw[aria-checked="true"]::after{transform:translateX(18px)}
+.card.concept{border-style:dashed;box-shadow:none;opacity:.85}
+.badge{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.kp.mini.timer .key{width:auto;height:58px}.kp.mini.timer .span2{grid-column:span 2}.kp.mini.timer .span3{grid-column:span 3}
+.kt{font-weight:800;font-size:12px;letter-spacing:.04em;color:#cfd6e4;text-align:center;line-height:1.15}
+.kt small{display:block;font-size:9px;color:#98a1b3;font-weight:600}
+.kt.big{font:800 30px ui-monospace,Menlo,monospace;letter-spacing:.02em}
+.sw.sm{width:34px;height:20px}.sw.sm::after{width:14px;height:14px}.sw.sm[aria-checked="true"]::after{transform:translateX(14px)}
+.crumb{display:flex;align-items:center;gap:8px;color:var(--muted);margin-bottom:10px}
+.crumb button{background:none;border:0;color:var(--muted);font-weight:600;padding:0}
+.crumb button:hover{color:var(--text)}
+.dhead{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.dhead .ico{width:56px;height:56px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:5px}
+.dhead .ico img{width:100%;height:100%}
+.dhead .grow{flex:1}
+.sec{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow)}
+.sec>.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sec .sd{color:var(--muted);font-size:12.5px;margin:0 0 8px}
+.grp{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 2px;font-weight:700}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,300px);gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row.dis{opacity:.4;pointer-events:none}
+.row .lbl b{font-weight:600}
+.row .lbl small{display:block;color:var(--muted);font-size:12px}
+.ctl{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+.ctl input[type=range]{flex:1;min-width:90px;accent-color:var(--accent)}
+.ctl output{min-width:62px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.rs{border:0;background:none;color:var(--muted);font-size:15px;padding:0 2px;visibility:hidden}
+.rs.chg{visibility:visible}
+select,input[type=text]{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:7px 10px;min-width:0}
+input[type=text]{width:100%}
+.tabs{display:flex;gap:6px;margin:6px 0 12px;flex-wrap:wrap}
+.tab{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);font-weight:600}
+.tab svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.tab .dot{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.tab .dot.on{background:var(--accent)}
+.pane{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel2)}
+.pane .en{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.pane.dim .body{opacity:.4;pointer-events:none}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;padding:7px 12px;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+.opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:10px 0}
+.opt{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:10px;text-align:left;display:flex;flex-direction:column;gap:2px}
+.opt.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt b{font-size:13px}.opt small{color:var(--muted);font-size:11.5px}
+.opt svg.wave{width:100%;height:24px;margin-top:4px}
+.opt svg.wave rect{fill:var(--accent)}
+.sw-colors{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.col{width:30px;height:30px;border-radius:9px;border:2px solid transparent;box-shadow:0 0 0 1px var(--line)}
+.col.sel{border-color:var(--text)}
+.inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.thumb{max-height:70px;max-width:140px;border-radius:8px;border:1px solid var(--line)}
+.fname{color:var(--muted);font-size:12.5px}
+.rec{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--danger);animation:pulse 1s infinite}
+kbd{background:var(--panel);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:2px 7px;font:600 12.5px ui-monospace,Menlo,monospace}
+.pomo{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.pomo .time{font:700 44px ui-monospace,Menlo,monospace;letter-spacing:-.02em}
+.pomo .ph{color:var(--muted);font-weight:600}
+.warnbox{color:var(--warn);font-size:12.5px}
+/* keypad */
+.kp{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;background:#0b0d12;padding:12px;border-radius:18px;border:1px solid #2a303d;width:max-content}
+.key{position:relative;width:74px;height:74px;border-radius:12px;background:#1a1e29;border:1px solid #2a303d;display:grid;place-items:center;overflow:hidden;padding:0}
+.key:hover{border-color:var(--accent)}
+.key img{width:42px;height:42px}
+.key .fx{position:absolute;inset:0;opacity:0;pointer-events:none;background-size:cover;background-position:center}
+.key .fx.on{opacity:1}
+.key .fx.pulse{animation:pulse 1.2s ease-in-out infinite}
+.key .fx.blink{animation:blink 1s steps(1) infinite}
+.kp.mini .key{width:58px;height:58px}.kp.mini .key img{width:32px;height:32px}
+.kp.big .key{width:96px;height:96px}.kp.big .key img{width:54px;height:54px}
+.kl{font-size:10px;color:#98a1b3;position:absolute;bottom:2px;left:0;right:0;text-align:center;pointer-events:none}
+.keywrap{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.keywrap select{font-size:11.5px;padding:4px 6px;width:100%;min-width:130px}
+.kpgrid{display:grid;grid-template-columns:repeat(3,auto);gap:14px;width:max-content}
+.cols2{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:start}
+@media(max-width:900px){.cols2{grid-template-columns:1fr}}
+/* rail */
+.rail h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
+.rail section{margin-bottom:22px}
+.mouse{display:flex;align-items:center;gap:12px}
+.mouse svg{width:56px;height:76px;stroke:var(--text);fill:none;stroke-width:1.6}
+.mouse .wf{font-size:12px;color:var(--muted)}
+.spk{display:flex;align-items:center;gap:10px;color:var(--muted)}
+.spk svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.spk.play{color:var(--accent);animation:pulse .6s infinite}
+.log{list-style:none;margin:0;padding:0;font-size:12.5px;color:var(--muted)}
+.log li{padding:5px 0;border-top:1px solid var(--line)}
+.log li:first-child{border-top:0}
+.log b{color:var(--text);font-weight:600}
+/* notifications */
+#toasts{position:fixed;inset:0;pointer-events:none;z-index:50}
+.toast{position:absolute;width:340px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.28);padding:12px 14px;display:flex;gap:12px;align-items:flex-start;animation:slidein .25s ease-out;pointer-events:auto}
+.toast.top-right{top:16px;right:16px}.toast.top-center{top:16px;left:calc(50% - 170px)}.toast.bottom-right{bottom:16px;right:16px}
+.toast .ti{width:38px;height:38px;border-radius:9px;background:var(--panel2);padding:3px;flex:none}
+.toast .ti img{width:100%;height:100%}
+.toast .tapp{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block}
+.toast b{display:block;font-size:14px}
+.toast p{margin:1px 0 0;color:var(--muted)}
+.toast img.media{display:block;max-width:100%;max-height:150px;border-radius:10px;margin-top:8px}
+.banner{position:absolute;top:0;left:0;right:0;padding:14px 22px;background:linear-gradient(90deg,var(--accent),#3da5ff);color:#04201b;font-weight:700;font-size:16px;display:flex;align-items:center;gap:12px;animation:slidedown .25s ease-out}
+.banner img.ti{width:30px;height:30px}.banner img.media{max-height:46px;border-radius:6px}
+.edge{position:absolute;inset:0;box-shadow:inset 0 0 0 6px var(--accent),inset 0 0 90px 10px var(--accent);animation:edge 1.4s ease-in-out infinite;display:grid;place-items:end center}
+.edge span{margin-bottom:60px;background:var(--panel);border:1px solid var(--line);padding:10px 18px;border-radius:999px;font-weight:700;box-shadow:var(--shadow)}
+.edge span img.media{max-height:60px;display:block;margin:6px auto 0;border-radius:8px}
+@keyframes slidein{from{transform:translateY(-12px);opacity:0}}
+@keyframes slidedown{from{transform:translateY(-100%)}}
+@keyframes pulse{50%{opacity:.35}}
+@keyframes blink{50%{opacity:0}}
+@keyframes edge{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.key .fx.pulse,.key .fx.blink,.edge{animation:none}}
+@media(max-width:1150px){.app{grid-template-columns:200px minmax(0,1fr)}.rail{display:none}}
+@media(max-width:760px){.app{grid-template-columns:1fr;height:auto}.side{flex-direction:row;overflow:auto;border-right:0;border-bottom:1px solid var(--line)}.brand{display:none}main{padding:18px 16px 50px}.row{grid-template-columns:1fr}.ctl{justify-content:flex-start}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side"></aside>
+  <main id="main"></main>
+  <aside class="rail" id="rail"></aside>
+</div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+/* ============ constants ============ */
+const CH = ["audio","screen","haptic","keypad"];
+const CH_LABEL = {audio:"Audio signal",screen:"Screen notification",haptic:"Mouse haptics",keypad:"Keypad colour"};
+const CH_SHORT = {audio:"Audio",screen:"Screen",haptic:"Haptics",keypad:"Keypad"};
+const SVG = {
+  audio:'<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>',
+  screen:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  haptic:'<svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="5"/><path d="M12 3v6M3 9l-1 3 1 3M21 9l1 3-1 3"/></svg>',
+  keypad:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="9.5" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="16" y="9.5" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><rect x="9.5" y="16" width="5" height="5" rx="1"/><rect x="16" y="16" width="5" height="5" rx="1"/></svg>',
+  dash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>',
+  prof:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>'
+};
+const SOUNDS = [["chime","Chime"],["ping","Ping"],["knock","Soft knock"],["alert","Double beep"],["rise","Rising"],["bell","Bell"]];
+const HAPTICS = {
+  tap:{name:"Tap",desc:"Short, crisp pulse",wf:"sharp_state_change",p:[60]},
+  bump:{name:"Bump",desc:"Soft impact",wf:"damp_collision",p:[90,40,50]},
+  alert:{name:"Alert",desc:"Attention grabbing",wf:"angry_alert",p:[70,50,70,50,70]},
+  jingle:{name:"Jingle",desc:"Friendly, musical",wf:"jingle",p:[40,30,40,30,80,30,120]}
+};
+const COLORS = ["#ff4d4f","#ffb020","#ffd43b","#2ee6a8","#3da5ff","#9b6bff","#ff6bd6","#ffffff"];
+
+/* ============ feature definitions (recommended defaults) ============ */
+/* NOTE: numbers are research-based placeholders; replace with the team's agreed values. */
+const FEATURES = [
+ {id:"speed",name:"Speech speed",blurb:"Warns when you talk too fast or too slow.",
+  params:[
+   {g:"Target",k:"target",label:"Target rate",unit:" wpm",min:80,max:220,step:5,def:140,help:"Comfortable presenting pace. Most guides say 120–160."},
+   {k:"fast",label:"“Too fast” above",unit:" wpm",min:100,max:260,step:5,def:170},
+   {k:"slow",label:"“Too slow” below",unit:" wpm",min:50,max:200,step:5,def:110},
+   {k:"window",label:"Measure over",unit:" s",min:5,max:60,step:5,def:15,help:"Rolling window, so one quick sentence does not trigger."}],
+  texts:[["text","Too fast message","Slow down"],["text2","Too slow message","Pick up the pace a little"]],
+  cd:{def:30,min:5,max:300},def:{on:true,ch:{screen:1},sound:"ping",haptic:"bump",color:"#ffb020",effect:"pulse"}},
+ {id:"volume",name:"Speech volume",blurb:"Keeps your voice at a comfortable level.",
+  params:[
+   {g:"Comfortable range",k:"quiet",label:"Volume floor (calibrated)",unit:" dB",min:30,max:80,step:1,def:50,help:"Set by calibrating: speak normally for 10 s. Below this = “speak up”."},
+   {k:"loud",label:"“Too loud” above",unit:" dB",min:50,max:100,step:1,def:75},
+   {k:"window",label:"Measure over",unit:" s",min:3,max:30,step:1,def:10}],
+  texts:[["text","Too quiet message","Speak up a little"],["text2","Too loud message","Lower your voice"]],
+  cd:{def:30,min:5,max:300},def:{on:true,ch:{screen:1},sound:"knock",haptic:"bump",color:"#3da5ff",effect:"pulse"}},
+ {id:"blink",name:"Eye blinking",blurb:"A quiet nudge when you blink too little.",
+  params:[
+   {g:"Blink rate",k:"min",label:"Remind if below",unit:" /min",min:4,max:20,step:1,def:8,help:"Normal is 15–20 blinks a minute; screens drop it to ~5."},
+   {k:"window",label:"Measure over",unit:"",time:true,min:60,max:600,step:30,def:300,help:"Rolling window."},
+   {k:"incomplete",label:"Also count incomplete blinks",type:"toggle",def:true,help:"Half-closed blinks do not rewet the eye."},
+   {k:"incPct",label:"Incomplete blinks above",unit:" %",min:20,max:90,step:5,def:50,dep:"incomplete"},
+   {g:"20-20-20 rule (optional)",k:"r2020",label:"Eye-rest reminder",type:"toggle",def:false,help:"Every 20 min, look 20 ft away for 20 s."},
+   {k:"every",label:"Remind every",unit:" min",min:10,max:60,step:5,def:20,dep:"r2020"},
+   {k:"rest",label:"Rest length",unit:" s",min:10,max:60,step:5,def:20,dep:"r2020"}],
+  texts:[["text","Blink reminder","Blink slowly, 3 full blinks"],["text2","Eye-rest message","Look 20 ft away for 20 s"]],
+  cd:{def:1200,min:60,max:3600},def:{on:true,ch:{screen:1},sound:"bell",haptic:"bump",color:"#2ee6a8",effect:"pulse"}},
+ {id:"brightness",concept:true,name:"Screen brightness",blurb:"Concept: matches screen, keyboard and room lights to your surroundings.",
+  params:[
+   {g:"Detection",k:"auto",label:"Adjust automatically",type:"toggle",def:true},
+   {k:"low",label:"Room “too dark” below",unit:" lux",min:50,max:500,step:10,def:200,help:"Offices are usually comfortable at 300–500 lux."},
+   {k:"high",label:"Room “too bright” above",unit:" lux",min:300,max:2000,step:50,def:750},
+   {g:"Monitor",k:"mon",label:"Control monitor brightness",type:"toggle",def:true},
+   {k:"monT",label:"Monitor target",unit:" %",min:10,max:100,step:5,def:60,dep:"mon"},
+   {g:"Keyboard",k:"kb",label:"Control keyboard backlight",type:"toggle",def:true},
+   {k:"kbT",label:"Backlight target",unit:" %",min:0,max:100,step:5,def:40,dep:"kb"},
+   {g:"Surrounding lights",k:"amb",label:"Control room lights",type:"toggle",def:false,help:"Logi Litra or a smart-bulb bridge."},
+   {k:"ambDev",label:"Light device",type:"select",opts:["Logitech Litra Glow","Philips Hue bridge","Other smart lights"],def:"Logitech Litra Glow",dep:"amb"},
+   {k:"ambT",label:"Light level",unit:" %",min:0,max:100,step:5,def:50,dep:"amb"}],
+  texts:[["text","Message","Brightness adjusted to match the room"]],
+  cd:{def:120,min:30,max:900},def:{on:false,ch:{screen:1},sound:"chime",haptic:"tap",color:"#ffd43b",effect:"steady"}},
+ {id:"pomodoro",name:"Pomodoro",blurb:"Focus sessions that count only the time you are at the desk.",
+  params:[
+   {g:"Timer",k:"work",label:"Focus session at desk",unit:" min",min:5,max:90,step:5,def:25},
+   {k:"short",label:"Short break",unit:" min",min:1,max:30,step:1,def:5},
+   {k:"long",label:"Long break",unit:" min",min:5,max:60,step:5,def:15},
+   {k:"rounds",label:"Sessions before long break",unit:"",min:2,max:8,step:1,def:4},
+   {k:"auto",label:"Start next phase automatically",type:"toggle",def:false},
+   {g:"Camera",k:"cam",label:"Pause when I leave, resume when I return",type:"toggle",def:true,help:"Uses the camera to see whether you are at the desk."},
+   {k:"reset",label:"Reset the timer if away for",unit:" min",min:1,max:30,step:1,def:5,dep:"cam",help:"Away 5 min or more means you already took a break."}],
+  texts:[["text","Session finished","Focus session done. Take a break"],["text2","Break finished","Break over. Back to focus"]],
+  cd:{def:180,min:0,max:900,note:"The reminder repeats this often until you take a break."},def:{on:false,ch:{screen:1,haptic:1},sound:"rise",haptic:"jingle",color:"#ff4d4f",effect:"steady"}},
+ {id:"distance",name:"Volume when far",blurb:"Raises volume when you move away, restores it when you return.",
+  params:[
+   {g:"Detection",k:"shrink",label:"Face box shrinks by",unit:" %",min:10,max:70,step:5,def:30,help:"Compared with your normal sitting distance. Leaving the frame also counts."},
+   {k:"hold",label:"Act after",unit:" s",min:.5,max:10,step:.5,def:2,help:"Avoids reacting to a quick lean back."},
+   {g:"Volume",k:"boost",label:"Raise volume by",unit:" %",min:5,max:60,step:5,def:20},
+   {k:"smooth",label:"Raise gradually",type:"toggle",def:true},
+   {k:"restore",label:"Restore volume when I am back",type:"toggle",def:true},
+   {g:"When I leave the camera",k:"leave",label:"Pause audio/video after",unit:" s",min:0,max:600,step:10,def:120,off0:true,help:"0 = never pause."},
+   {k:"resume",label:"Resume when I return",type:"toggle",def:true}],
+  texts:[["text","Volume raised","Volume raised, you are far away"],["text2","Paused","Paused. You left the desk"]],
+  cd:{def:0,min:0,max:300,note:"No cooldown by default: it follows your distance."},def:{on:true,ch:{},sound:"chime",haptic:"tap",color:"#9b6bff",effect:"steady"}},
+ {id:"behind",name:"Person behind you",blurb:"Spots someone behind you and hides your screen.",
+  params:[
+   {g:"Detection",k:"hold",label:"A second face for at least",unit:" s",min:.5,max:10,step:.5,def:2,help:"Avoids false alarms from someone just walking past."},
+   {k:"range",label:"Only count people within",unit:" m",min:1,max:6,step:.5,def:3},
+   {g:"What happens",k:"act",label:"When detected",type:"select",opts:["Hide all windows","Blur the screen","Switch to a safe app","Lock the screen","Only notify me"],def:"Hide all windows"},
+   {k:"sc",label:"Shortcut that does it",type:"shortcut",def:"⌘ ⌥ H",help:"Sent to your computer, so you can use any hide-everything shortcut."},
+   {k:"back",label:"Restore when they leave after",unit:" s",min:0,max:60,step:1,def:5,off0:true,help:"0 = never restore automatically."}],
+  texts:[["text","Message","Someone is behind you"]],
+  cd:{def:60,min:3,max:300},def:{on:true,ch:{screen:1},sound:"alert",haptic:"alert",color:"#ff4d4f",effect:"blink"}}
+];
+const F = Object.fromEntries(FEATURES.map(f=>[f.id,f]));
+const KL={speed:"Pace",volume:"Voice",blink:"Blink",brightness:"Soon",pomodoro:"Focus",distance:"Far",behind:"Behind",master:"Master",present:"Present"};
+const SPECIAL = {master:"Master switch",present:"Presenting mode",none:"Empty"};
+const PROFILES = {
+  everyday:{label:"Everyday",desc:"Recommended defaults.",on:["speed","volume","blink","distance","behind"],mute:[]},
+  presenting:{label:"Presenting",desc:"Pace, volume and privacy. Silent: no sounds or pop-ups the audience can see.",on:["speed","volume","behind"],mute:["audio","screen"]},
+  focus:{label:"Deep focus",desc:"Blinking and Pomodoro. Nothing noisy.",on:["blink","pomodoro"],mute:["audio"]},
+  meeting:{label:"Video meeting",desc:"Pace and volume without sounds the call could pick up.",on:["speed","volume","blink","behind"],mute:["audio"]}
+};
+
+/* ============ state ============ */
+const KEY = "deskcoach.v1";
+function makeFeature(d){
+  const params={}; d.params.forEach(p=>params[p.k]=p.def);
+  const texts={}; d.texts.forEach(t=>texts[t[0]]=t[2]);
+  const ch={}; CH.forEach(c=>ch[c]=!!d.def.ch[c]);
+  return {enabled:d.def.on,ch,cooldown:d.cd.def,params,
+    fb:{audio:{src:"builtin",sound:d.def.sound,file:null,fname:"",rec:null,volume:80},
+        screen:{style:"popup",pos:"top-right",texts,img:null,imgName:"",dur:5},
+        haptic:{pattern:d.def.haptic,repeat:1},
+        keypad:{mode:"color",color:d.def.color,img:null,imgName:"",effect:d.def.effect,dur:6}}};
+}
+function defaults(){
+  const features={}; FEATURES.forEach(d=>features[d.id]=makeFeature(d));
+  return {master:true,profile:"everyday",theme:"auto",features,
+    keymap:["speed","volume","blink","brightness","pomodoro","distance","behind","master","present"]};
+}
+function merge(a,b){ if(b===undefined||b===null) return a;
+  if(typeof a!=="object"||a===null||Array.isArray(a)) return b;
+  const o={...a}; for(const k in b) o[k]=k in a?merge(a[k],b[k]):b[k]; return o; }
+let S=defaults(), saveWarn=false;
+try{ const raw=localStorage.getItem(KEY); if(raw) S=merge(defaults(),JSON.parse(raw)); }catch(e){}
+function save(){ S.muted=(PROFILES[S.profile]||{}).mute||[]; try{ localStorage.setItem(KEY,JSON.stringify(S)); saveWarn=false; }catch(e){ saveWarn=true; } if(remote) schedulePush(); }
+
+/* ---- connection to the Coach plugin (page served by the plugin at http://127.0.0.1:8787/) ----
+   When the page is opened from the plugin, settings, the Pomodoro timer and the haptic/keypad tests go to the real devices.
+   Opened as a plain file it stays a preview and keeps everything in the browser. */
+let remote=false, lastRev=0, pushT=null;
+const TRIG={speed:["pace_too_fast","pace_too_fast"],volume:["speak_up","speak_down"],blink:["blink_low","blink_low"],pomodoro:["break_due","break_over"],distance:["volume_far","volume_far"],behind:["person_behind","person_behind"]};
+const JSONH={"Content-Type":"application/json"};
+function schedulePush(){ clearTimeout(pushT); pushT=setTimeout(pushNow,250); }
+async function pushNow(){ clearTimeout(pushT); if(!remote) return;
+  try{ const r=await fetch("/ui-state",{method:"POST",headers:JSONH,body:JSON.stringify(S)}); const j=await r.json(); if(j.rev) lastRev=j.rev; }
+  catch(e){ remote=false; renderAll(); } }
+function busyEditing(){ const a=document.activeElement; return !!(a&&a.closest&&a.closest("#main")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName)); }
+async function pollState(){ if(!remote) return;
+  try{ const j=await (await fetch("/ui-state")).json(); if(j.rev&&j.rev!==lastRev&&!busyEditing()){ S=merge(defaults(),j); lastRev=j.rev; applyTheme(); renderAll(); } }catch(e){} }
+function applyPomo(j){ const P=ui.pomo; if(!P||!j||!j.phase) return; const was=P.away;
+  P.phase=j.phase; P.round=j.round; P.left=j.left; P.run=j.running; P.away=!j.atDesk; ui.keyTimer=j.active; pomoPaint();
+  if(was!==P.away&&ui.route==="f/pomodoro") renderMain(); }
+async function pollPomo(){ if(!remote) return; try{ applyPomo(await (await fetch("/pomodoro")).json()); }catch(e){} }
+function plugPost(path,body){ return fetch(path,{method:"POST",headers:JSONH,body:body?JSON.stringify(body):undefined}).then(r=>r.json()).then(applyPomo).catch(()=>{}); }
+async function plugDeliver(id,tk,chans){ await pushNow(); const name=TRIG[id][tk==="text2"?1:0];
+  for(const only of chans.filter(c=>c==="haptic"||c==="keypad")){ try{ await fetch("/trigger",{method:"POST",headers:JSONH,body:JSON.stringify({trigger:name,severity:1,force:true,only})}); }catch(e){} } }
+async function connect(){
+  if(!/^https?:$/.test(location.protocol)) return;
+  try{
+    const r=await fetch("/ui-state"); if(!r.ok) throw new Error("no plugin"); const j=await r.json(); remote=true;
+    const complete=j.features&&j.features.speed&&j.features.speed.cooldown!==undefined&&j.features.pomodoro&&j.features.pomodoro.params;
+    if(j.features){ S=merge(defaults(),j); lastRev=j.rev||0; applyTheme(); }
+    if(!complete){ S.muted=(PROFILES[S.profile]||{}).mute||[]; await pushNow(); }
+    renderAll(); setInterval(pollState,2000); setInterval(pollPomo,1000); pollPomo();
+  }catch(e){ remote=false; }
+}
+const ui={tab:{},route:"",rec:null,pomo:null};
+const last={}; const log=[];
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtT=s=>s===0?"None":s>=60?(s%60?Math.floor(s/60)+" min "+(s%60)+" s":(s/60)+" min"):s+" s";
+const fmtP=(p,v)=>(p.off0&&Number(v)===0)?"Off":p.time?fmtT(+v):v+(p.unit||"");
+const iconSrc=(id,on=true)=>"assets/icons/"+id+(on?"":"_off")+".png";
+
+/* ============ actions ============ */
+function setEnabled(id,v){ if(F[id].concept) return; S.features[id].enabled=v; S.profile="custom"; if(id==="pomodoro") pomoSwitch(v); save(); renderAll(); }
+function applyProfile(p){ S.profile=p; S.master=true; FEATURES.forEach(d=>S.features[d.id].enabled=PROFILES[p].on.includes(d.id)); if(ui.pomo) pomoSwitch(S.features.pomodoro.enabled); save(); renderAll();
+  addLog("Profile → <b>"+PROFILES[p].label+"</b>"); }
+function pressKey(i){
+  const a=S.keymap[i];
+  if(a==="master"){ S.master=!S.master; addLog("Keypad → master <b>"+(S.master?"ON":"OFF")+"</b>"); }
+  else if(a==="present"){ applyProfile(S.profile==="presenting"?"everyday":"presenting"); return; }
+  else if(F[a]){ if(F[a].concept){ addLog(F[a].name+": <b>concept</b>, needs a camera with brightness data"); return; } const f=S.features[a]; f.enabled=!f.enabled; S.profile="custom"; if(a==="pomodoro") pomoSwitch(f.enabled); addLog("Keypad → "+F[a].name+" <b>"+(f.enabled?"ON":"OFF")+"</b>"); }
+  save(); renderAll();
+}
+function keyActive(a){ if(a==="master") return S.master; if(a==="present") return S.profile==="presenting"; if(F[a]) return S.master&&S.features[a].enabled; return false; }
+function addLog(h){ const t=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}); log.unshift(t+" · "+h); log.length=Math.min(log.length,7); const el=$("#log"); if(el) el.innerHTML=logHTML(); }
+const logHTML=()=>log.length?log.map(l=>"<li>"+l+"</li>").join(""):"<li>Nothing yet. Use a Test button.</li>";
+
+/* ---- feedback engine ---- */
+function fire(id,o={}){
+  const f=S.features[id], d=F[id], tk=o.text||"text";
+  if(d.concept){ addLog(d.name+": <b>concept</b>, not built yet"); return false; }
+  if(!o.force){
+    if(!S.master||!f.enabled){ addLog(d.name+": <b>ignored</b> (off)"); return false; }
+    const left=f.cooldown*1000-(Date.now()-(last[id]||0));
+    if(left>0){ addLog(d.name+": <b>cooldown</b> "+Math.ceil(left/1000)+" s left"); return false; }
+  }
+  last[id]=Date.now();
+  const mute=(o.force||!PROFILES[S.profile])?[]:PROFILES[S.profile].mute;
+  const chans=CH.filter(c=>(o.only?c===o.only:f.ch[c])&&!mute.includes(c));
+  chans.forEach(c=>({audio:playAudio,screen:showScreen,haptic:doHaptic,keypad:flashKey})[c](id,tk));
+  if(remote) plugDeliver(id,tk,chans);
+  addLog("<b>"+d.name+"</b> → "+(chans.length?chans.map(c=>CH_SHORT[c]).join(" + "):"silent")+(mute.length&&!o.force?" (muted: "+mute.join(", ")+")":""));
+  return true;
+}
+function playAudio(id){
+  const c=S.features[id].fb.audio;
+  let src=c.src==="upload"?c.file:c.src==="record"?c.rec:null;
+  if(!src) src="assets/sounds/"+c.sound+".wav";
+  const a=new Audio(src); a.volume=Math.max(0,Math.min(1,c.volume/100));
+  const sp=$("#spk"); if(sp){ sp.classList.add("play"); a.onended=()=>sp.classList.remove("play"); setTimeout(()=>sp.classList.remove("play"),4000); }
+  a.play().catch(()=>addLog("Audio blocked by browser. Click anywhere first."));
+}
+function showScreen(id,tk){
+  const f=S.features[id], c=f.fb.screen, d=F[id];
+  const text=c.texts[tk]||c.texts.text||"";
+  const root=$("#toasts"), el=document.createElement("div");
+  const media=c.img?'<img class="media" src="'+c.img+'" alt="">':"";
+  const ic='<img class="px ti" src="'+iconSrc(id)+'" alt="">';
+  if(c.style==="banner"){ el.className="banner"; el.innerHTML=ic+"<span>"+esc(d.name)+": "+esc(text)+"</span>"+media; }
+  else if(c.style==="edge"){ el.className="edge"; el.innerHTML="<span>"+esc(text)+media+"</span>"; }
+  else { el.className="toast "+c.pos; el.innerHTML='<div class="ti">'+ic+'</div><div><span class="tapp">Desk Coach · '+esc(d.name)+"</span><b>"+esc(text)+"</b>"+media+"</div>"; }
+  root.appendChild(el); setTimeout(()=>el.remove(),c.dur*1000);
+}
+function doHaptic(id){
+  const c=S.features[id].fb.haptic, h=HAPTICS[c.pattern]||HAPTICS.tap;
+  let seq=[]; for(let i=0;i<c.repeat;i++) seq=seq.concat(h.p,i<c.repeat-1?[250]:[]);
+  const m=$("#mouse"); if(m&&m.animate){
+    let t=0,tot=seq.reduce((a,b)=>a+b,0)||1; const kf=[{transform:"translateX(0)",offset:0}];
+    seq.forEach((d,i)=>{ const on=i%2===0; t+=d; kf.push({transform:on?"translateX("+(i%4===0?4:-4)+"px)":"translateX(0)",offset:Math.min(1,t/tot)}); });
+    m.animate(kf,{duration:tot}); }
+  const w=$("#wf"); if(w){ w.textContent="MX Master 4 · "+h.wf; setTimeout(()=>{ if(w.textContent.includes(h.wf)) w.textContent="Idle"; },2500); }
+}
+function flashKey(id){
+  const c=S.features[id].fb.keypad;
+  let idx=S.keymap.map((a,i)=>a===id?i:-1).filter(i=>i>=0); if(!idx.length) idx=[4];
+  document.querySelectorAll(".key").forEach(k=>{
+    if(!idx.includes(+k.dataset.key)) return;
+    const fx=k.querySelector(".fx"); if(!fx) return;
+    fx.style.background=c.mode==="image"&&c.img?"url("+c.img+") center/cover":c.color;
+    fx.className="fx on "+(c.effect==="steady"?"":c.effect);
+    clearTimeout(fx._t); fx._t=setTimeout(()=>{ fx.className="fx"; },c.dur*1000);
+  });
+}
+
+/* ============ views ============ */
+function renderSide(){
+  const nav=[["","Dashboard","dash"],["keypad","MX Keypad","keypad"],["profiles","Profiles","prof"],["settings","Devices & data","gear"]];
+  const r=ui.route.split("/")[0];
+  $("#side").innerHTML='<div class="brand"><img class="px" src="'+iconSrc("blink")+'" alt="">Desk Coach</div>'+
+    nav.map(n=>'<button class="nav '+((r===n[0]||(n[0]===""&&r==="f"))?"on":"")+'" data-act="go" data-to="'+n[0]+'">'+n[2].replace(/^(.*)$/,k=>SVG[k])+n[1]+"</button>").join("")+
+    '<div class="sp"></div><button class="theme" data-act="theme">Theme: '+S.theme+"</button>";
+}
+function keypadHTML(cls,labels){
+  if(cls==="mini"&&timerMode()) return timerKeypad();
+  return '<div class="kp '+cls+'">'+S.keymap.map((a,i)=>{
+    const known=F[a]||a==="master"||a==="present";
+    const on=keyActive(a);
+    return '<button class="key" data-act="key" data-key="'+i+'" title="'+esc(F[a]?F[a].name:SPECIAL[a]||"")+'">'+
+      (known?'<img class="px" src="'+iconSrc(a,on)+'" alt="">':"")+'<div class="fx"></div>'+(labels&&known?'<span class="kl">'+(KL[a]||"")+"</span>":"")+"</button>";
+  }).join("")+"</div>";
+}
+function renderRail(){
+  $("#rail").innerHTML=
+   '<section><h3>MX Keypad</h3><div id="railkp">'+keypadHTML("mini",false)+'</div><p class="sub" style="margin-top:8px;font-size:12px">'+(timerMode()?"Showing the Pomodoro timer. Press the Pomodoro key again to stop it.":"Tap a key to switch a feature on or off.")+"</p></section>"+
+   '<section><h3>MX Master 4</h3><div class="mouse"><svg viewBox="0 0 56 76" id="mouse"><rect x="6" y="4" width="44" height="68" rx="22"/><path d="M28 4v26M6 30h44"/></svg><div class="wf" id="wf">Idle</div></div></section>'+
+   '<section><h3>Speaker</h3><div class="spk" id="spk">'+SVG.audio+'<span>Audio signal</span></div></section>'+
+   '<section><h3>Activity</h3><ul class="log" id="log">'+logHTML()+"</ul></section>";
+}
+function toggleSw(on,act,extra){ return '<button class="sw" role="switch" aria-checked="'+on+'" data-act="'+act+'" '+(extra||"")+"></button>"; }
+function summary(d,f){
+  const p=f.params, m={
+   speed:()=>"Target "+p.target+" wpm",volume:()=>p.quiet+"–"+p.loud+" dB",blink:()=>"Below "+p.min+" blinks/min over "+fmtT(p.window),
+   brightness:()=>[p.mon&&"Monitor "+p.monT+"%",p.kb&&"Keys "+p.kbT+"%",p.amb&&"Lights "+p.ambT+"%"].filter(Boolean).join(" · ")||"No devices selected",
+   pomodoro:()=>p.work+" / "+p.short+" / "+p.long+" min, reset after "+p.reset+" min away",distance:()=>"Face −"+p.shrink+"% for "+p.hold+" s, volume +"+p.boost+"%",
+   behind:()=>"2nd face "+p.hold+" s · "+p.act};
+  return m[d.id]()+" · cooldown "+fmtT(f.cooldown);
+}
+function renderDash(){
+  const st=PROFILES[S.profile];
+  $("#main").innerHTML=
+   '<div class="top"><div class="grow"><h1>Desk Coach</h1><p class="sub" style="margin:0">Camera and microphone coaching, processed locally on your computer.</p></div>'+
+   '<div style="display:flex;gap:12px;align-items:center"><label style="display:flex;gap:8px;align-items:center;font-weight:600">Master '+toggleSw(S.master,"master")+"</label>"+
+   '<select data-act="profile">'+Object.entries(PROFILES).map(([k,v])=>'<option value="'+k+'" '+(S.profile===k?"selected":"")+">"+v.label+"</option>").join("")+'<option value="custom" '+(S.profile==="custom"?"selected":"")+">Custom</option></select></div></div>"+
+   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span class="chip '+(remote?"":"warn")+'"><i></i>'+(remote?"Connected to the Coach plugin":"Preview only: not connected to the plugin")+'</span><span class="chip warn"><i></i>Camera and microphone detection: not connected yet</span>'+
+   (st&&st.mute.length?'<span class="chip warn"><i></i>Silent: '+st.mute.join(" + ")+" muted</span>":"")+"</div>"+
+   '<div class="note">'+(remote?"Settings are saved in the plugin and apply to real triggers. <b>Test</b> also buzzes the MX Master 4 and lights the MX Keypad. Pop-ups and sounds play in this page until the overlay is connected.":"Preview: detection is not connected yet. Use <b>Test</b> on each card to see and hear the feedback. Settings are saved in this browser. Open this page from the plugin (http://127.0.0.1:8787/) to reach the real devices.")+"</div>"+
+   '<div class="grid">'+FEATURES.map(d=>{ const f=S.features[d.id]; if(d.concept) return conceptCard(d);
+     return '<div class="card '+(f.enabled?"":"off")+'"><div class="head"><div class="ico"><img class="px" src="'+iconSrc(d.id)+'" alt=""></div>'+
+      '<div class="ttl"><b>'+d.name+"</b><span>"+d.blurb+"</span></div>"+toggleSw(f.enabled,"toggle",'data-id="'+d.id+'" aria-label="Enable '+d.name+'"')+"</div>"+
+      '<div class="chs">'+CH.map(c=>'<button class="chb '+(f.ch[c]?"on":"")+'" data-act="ch" data-id="'+d.id+'" data-c="'+c+'" title="'+CH_LABEL[c]+(f.ch[c]?": on":": off")+'" aria-pressed="'+f.ch[c]+'">'+SVG[c]+"</button>").join("")+
+      '<span class="sum" style="margin-left:6px">'+(CH.filter(c=>f.ch[c]).length||"No")+" feedback type"+(CH.filter(c=>f.ch[c]).length===1?"":"s")+"</span></div>"+
+      '<div class="sum">'+summary(d,f)+"</div>"+
+      '<div class="cardfoot"><button class="btn sm" data-act="test" data-id="'+d.id+'">Test</button><button class="btn" data-act="go" data-to="f/'+d.id+'">Customize ›</button></div></div>'; }).join("")+"</div>";
+}
+
+/* ---- detail ---- */
+function paramRow(d,f,p){
+  const v=f.params[p.k], dis=p.dep&&!f.params[p.dep], chg=String(v)!==String(p.def);
+  const rs='<button class="rs '+(chg?"chg":"")+'" data-act="presetp" data-id="'+d.id+'" data-k="'+p.k+'" title="Recommended: '+esc(p.type==="toggle"?(p.def?"on":"off"):p.def+(p.unit||""))+'">↺</button>';
+  let ctl;
+  if(p.type==="toggle") ctl=toggleSw(v,"ptoggle",'data-id="'+d.id+'" data-k="'+p.k+'"');
+  else if(p.type==="select") ctl='<select data-act="psel" data-id="'+d.id+'" data-k="'+p.k+'">'+p.opts.map(o=>'<option '+(o===v?"selected":"")+">"+o+"</option>").join("")+"</select>";
+  else if(p.type==="shortcut") ctl='<kbd id="sc-'+d.id+'">'+esc(v)+'</kbd><button class="btn sm" data-act="rec-sc" data-id="'+d.id+'" data-k="'+p.k+'">Record</button>';
+  else ctl='<input type="range" min="'+p.min+'" max="'+p.max+'" step="'+p.step+'" value="'+v+'" data-act="prange" data-id="'+d.id+'" data-k="'+p.k+'"><output>'+fmtP(p,v)+"</output>";
+  return (p.g?'<div class="grp">'+p.g+"</div>":"")+'<div class="row '+(dis?"dis":"")+'"><div class="lbl"><b>'+p.label+"</b>"+(p.help?"<small>"+p.help+"</small>":"")+'</div><div class="ctl">'+ctl+rs+"</div></div>";
+}
+function pomoHTML(){
+  const P=ui.pomo; const mm=String(Math.floor(P.left/60)).padStart(2,"0"), ss=String(P.left%60).padStart(2,"0");
+  return '<div class="sec"><div class="sh"><h2>Timer</h2><span class="chip" id="pchip">'+(P.away?"You are away":"At desk")+"</span></div><div class=\"pomo\"><div><div class=\"time\" id=\"ptime\">"+mm+":"+ss+'</div><div class="ph" id="pphase">'+P.label()+'</div></div>'+
+   '<button class="btn pri" data-act="pomo-run" id="prun">'+(P.run?"Pause":"Start")+'</button><button class="btn" data-act="pomo-skip">Skip</button><button class="btn" data-act="pomo-reset">Reset</button>'+
+   '<span style="flex:1"></span>'+(P.away&&S.features.pomodoro.params.cam?'<button class="btn sm" data-act="pomo-away5">Demo: skip ahead '+S.features.pomodoro.params.reset+' min</button>':"")+'<button class="btn sm" data-act="pomo-away">'+(P.away?"Simulate: I am back":"Simulate: I left the desk")+"</button></div></div>";
+}
+function chPane(d,f,c){
+  const cfg=f.fb[c]; let b="";
+  if(c==="audio"){
+    b='<div class="inline"><div class="seg">'+[["builtin","Built-in"],["upload","Upload"],["record","Record voice"]].map(s=>'<button class="'+(cfg.src===s[0]?"on":"")+'" data-act="fbset" data-id="'+d.id+'" data-c="audio" data-k="src" data-v="'+s[0]+'">'+s[1]+"</button>").join("")+"</div></div>";
+    if(cfg.src==="builtin") b+='<div class="opts">'+SOUNDS.map(s=>'<button class="opt '+(cfg.sound===s[0]?"sel":"")+'" data-act="sound" data-id="'+d.id+'" data-v="'+s[0]+'"><b>'+s[1]+"</b><small>Tap to hear</small></button>").join("")+"</div>";
+    if(cfg.src==="upload") b+='<div class="inline"><input type="file" accept="audio/*" data-act="file" data-id="'+d.id+'" data-t="audio"><span class="fname">'+(cfg.fname?esc(cfg.fname):"No file chosen")+"</span></div>";
+    if(cfg.src==="record") b+='<div class="inline"><button class="btn '+(ui.rec&&ui.rec.id===d.id?"danger":"")+'" data-act="rec-voice" data-id="'+d.id+'">'+(ui.rec&&ui.rec.id===d.id?"■ Stop":"● Record")+"</button>"+(ui.rec&&ui.rec.id===d.id?'<span class="rec"></span> Recording…':'<span class="fname">'+(cfg.rec?"Voice saved":"Nothing recorded yet")+"</span>")+'</div><div class="warnbox" id="recerr"></div>';
+    b+=slider("Volume",cfg.volume,0,100,1," %",'data-act="fbnum" data-id="'+d.id+'" data-c="audio" data-k="volume"');
+    b+='<div class="inline"><button class="btn" data-act="test" data-only="audio" data-id="'+d.id+'">▶ Play this signal</button></div>';
+  }
+  if(c==="screen"){
+    b='<div class="inline"><div class="seg">'+[["popup","System pop-up"],["banner","Top banner"],["edge","Screen glow"]].map(s=>'<button class="'+(cfg.style===s[0]?"on":"")+'" data-act="fbset" data-id="'+d.id+'" data-c="screen" data-k="style" data-v="'+s[0]+'">'+s[1]+"</button>").join("")+"</div>"+
+      (cfg.style==="popup"?'<select data-act="fbsel" data-id="'+d.id+'" data-c="screen" data-k="pos">'+[["top-right","Top right"],["top-center","Top centre"],["bottom-right","Bottom right"]].map(o=>'<option value="'+o[0]+'" '+(cfg.pos===o[0]?"selected":"")+">"+o[1]+"</option>").join("")+"</select>":"")+"</div>";
+    b+=d.texts.map(t=>'<div class="row"><div class="lbl"><b>'+t[1]+'</b></div><div class="ctl"><input type="text" value="'+esc(cfg.texts[t[0]])+'" data-act="fbtext" data-id="'+d.id+'" data-k="'+t[0]+'"><button class="btn sm" data-act="test" data-only="screen" data-text="'+t[0]+'" data-id="'+d.id+'">Preview</button></div></div>').join("");
+    b+='<div class="row"><div class="lbl"><b>GIF or image</b><small>Shown inside the notification.</small></div><div class="ctl">'+(cfg.img?'<img class="thumb" src="'+cfg.img+'" alt=""><button class="btn sm" data-act="clearimg" data-id="'+d.id+'" data-c="screen">Remove</button>':"")+'<input type="file" accept="image/*" data-act="file" data-id="'+d.id+'" data-t="screen"></div></div>';
+    b+=slider("Show for",cfg.dur,2,15,1," s",'data-act="fbnum" data-id="'+d.id+'" data-c="screen" data-k="dur"');
+  }
+  if(c==="haptic"){
+    b='<p class="sd">Choose one of the four MX Master 4 haptic patterns.</p><div class="opts">'+Object.entries(HAPTICS).map(([k,h])=>{
+      let x=0; const bars=h.p.map((w,i)=>{ const r=i%2===0?'<rect x="'+x+'" y="2" width="'+Math.max(2,w/2)+'" height="20" rx="1"/>':""; x+=w/2; return r; }).join("");
+      return '<button class="opt '+(cfg.pattern===k?"sel":"")+'" data-act="haptic" data-id="'+d.id+'" data-v="'+k+'"><b>'+h.name+"</b><small>"+h.desc+'</small><svg class="wave" viewBox="0 0 '+Math.max(40,x)+' 24" preserveAspectRatio="none">'+bars+"</svg><small>"+h.wf+"</small></button>"; }).join("")+"</div>"+
+      '<div class="inline">Repeat <div class="seg">'+[1,2,3].map(n=>'<button class="'+(cfg.repeat===n?"on":"")+'" data-act="fbset" data-id="'+d.id+'" data-c="haptic" data-k="repeat" data-v="'+n+'" data-num="1">'+n+"×</button>").join("")+'</div><button class="btn" data-act="test" data-only="haptic" data-id="'+d.id+'">Feel it</button></div>'+
+      '<p class="sd">The mouse in the right panel shakes to preview. Real vibration needs the MX Master 4 and the Options+ plugin.</p>';
+  }
+  if(c==="keypad"){
+    const keys=S.keymap.map((a,i)=>a===d.id?i+1:0).filter(Boolean);
+    b='<div class="inline"><div class="seg">'+[["color","Colour"],["image","Image"]].map(s=>'<button class="'+(cfg.mode===s[0]?"on":"")+'" data-act="fbset" data-id="'+d.id+'" data-c="keypad" data-k="mode" data-v="'+s[0]+'">'+s[1]+"</button>").join("")+"</div></div>";
+    if(cfg.mode==="color") b+='<div class="sw-colors">'+COLORS.map(x=>'<button class="col '+(cfg.color===x?"sel":"")+'" style="background:'+x+'" data-act="color" data-id="'+d.id+'" data-v="'+x+'" aria-label="'+x+'"></button>').join("")+'<input type="color" value="'+cfg.color+'" data-act="colorin" data-id="'+d.id+'"></div>';
+    else b+='<div class="inline">'+(cfg.img?'<img class="thumb" src="'+cfg.img+'" alt=""><button class="btn sm" data-act="clearimg" data-id="'+d.id+'" data-c="keypad">Remove</button>':'<span class="fname">Upload an image (it will be cropped to a square key).</span>')+'<input type="file" accept="image/*" data-act="file" data-id="'+d.id+'" data-t="keypad"></div>';
+    b+='<div class="inline">Effect <div class="seg">'+[["steady","Steady"],["pulse","Pulse"],["blink","Blink"]].map(s=>'<button class="'+(cfg.effect===s[0]?"on":"")+'" data-act="fbset" data-id="'+d.id+'" data-c="keypad" data-k="effect" data-v="'+s[0]+'">'+s[1]+"</button>").join("")+"</div></div>";
+    b+=slider("Show for",cfg.dur,2,30,1," s",'data-act="fbnum" data-id="'+d.id+'" data-c="keypad" data-k="dur"');
+    b+='<div class="inline"><button class="btn" data-act="test" data-only="keypad" data-id="'+d.id+'">Light the key</button>'+(keys.length?'<span class="fname">Shown on key '+keys.join(", ")+"</span>":'<span class="warnbox">Not on a key yet. Assign it on the MX Keypad page. Preview uses the centre key.</span>')+"</div>";
+  }
+  return '<div class="pane '+(f.ch[c]?"":"dim")+'"><div class="en"><b>'+CH_LABEL[c]+"</b><label style=\"display:flex;gap:8px;align-items:center\">"+(f.ch[c]?"On":"Off")+" "+toggleSw(f.ch[c],"ch",'data-id="'+d.id+'" data-c="'+c+'"')+'</label></div><div class="body">'+b+"</div></div>";
+}
+function slider(label,v,min,max,step,unit,attrs){
+  return '<div class="row"><div class="lbl"><b>'+label+'</b></div><div class="ctl"><input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+v+'" '+attrs+' data-unit="'+esc(unit)+'"><output>'+v+unit+"</output></div></div>";
+}
+function renderDetail(id){
+  const d=F[id]; if(!d){ location.hash="#/"; return; }
+  if(d.concept){ renderConcept(d); return; }
+  const f=S.features[id]; const tab=ui.tab[id]||(CH.find(c=>f.ch[c])||"audio");
+  if(id==="pomodoro"&&!ui.pomo) initPomo();
+  $("#main").innerHTML=
+   '<div class="crumb"><button data-act="go" data-to="">‹ Dashboard</button> / '+d.name+"</div>"+
+   '<div class="dhead"><div class="ico"><img class="px" src="'+iconSrc(id)+'" alt=""></div><div class="grow"><h1>'+d.name+'</h1><p class="sub" style="margin:0">'+d.blurb+"</p></div>"+toggleSw(f.enabled,"toggle",'data-id="'+id+'"')+"</div>"+
+   (id==="pomodoro"?pomoHTML():"")+
+   '<div class="sec"><div class="sh"><h2>When it triggers</h2><button class="btn sm ghost" data-act="reset-params" data-id="'+id+'">Reset to recommended</button></div>'+d.params.map(p=>paramRow(d,f,p)).join("")+"</div>"+
+   '<div class="sec"><div class="sh"><h2>How you are notified</h2><button class="btn sm ghost" data-act="reset-fb" data-id="'+id+'">Reset to recommended</button></div>'+
+   '<p class="sd">Pick one or more. Each type has its own settings below.</p>'+
+   '<div class="tabs">'+CH.map(c=>'<button class="tab '+(tab===c?"sel":"")+'" data-act="tab" data-id="'+id+'" data-c="'+c+'">'+SVG[c]+CH_SHORT[c]+' <span class="dot '+(f.ch[c]?"on":"")+'"></span></button>').join("")+"</div>"+chPane(d,f,tab)+"</div>"+
+   '<div class="sec"><div class="sh"><h2>Cooldown</h2></div><p class="sd">After it triggers, wait at least this long before it can trigger again.</p>'+
+   '<div class="row"><div class="lbl"><b>Cooldown</b><small>Recommended: '+fmtT(d.cd.def)+(d.cd.note?". "+d.cd.note:"")+"</small></div><div class=\"ctl\"><input type=\"range\" min=\""+d.cd.min+"\" max=\""+d.cd.max+"\" step=\""+(d.cd.max>600?30:d.cd.max>120?5:1)+'" value="'+f.cooldown+'" data-act="cd" data-id="'+id+'"><output id="cdout">'+fmtT(f.cooldown)+'</output><button class="rs '+(f.cooldown!==d.cd.def?"chg":"")+'" data-act="cd-reset" data-id="'+id+'">↺</button></div></div></div>'+
+   '<div class="sec"><div class="inline" style="margin:0"><button class="btn pri" data-act="test" data-id="'+id+'">Test all feedback now</button><button class="btn" data-act="sim" data-id="'+id+'">Simulate real trigger</button><span class="fname">“Simulate” follows on/off, silent profile and cooldown, like the real thing.</span></div></div>';
+}
+function renderKeypadPage(){
+  $("#main").innerHTML='<h1>MX Keypad</h1><p class="sub">Each key switches one feature on or off. In Options+, every feature is an action you drag onto a key.</p>'+
+   '<div class="cols2"><div><div class="kpgrid">'+S.keymap.map((a,i)=>'<div class="keywrap">'+keypadHTML("big",true).split('<button class="key"').filter((_,j)=>j===i+1).map(s=>'<div class="kp big" style="padding:0;background:none;border:0;display:block"><button class="key"'+s.replace(/<\/div>$/,"")+"</div>").join("")+
+     '<select data-act="keymap" data-i="'+i+'">'+FEATURES.map(d=>'<option value="'+d.id+'" '+(a===d.id?"selected":"")+">"+d.name+"</option>").join("")+Object.entries(SPECIAL).map(([k,v])=>'<option value="'+k+'" '+(a===k?"selected":"")+">"+v+"</option>").join("")+"</select></div>").join("")+"</div>"+
+   '<p class="sub" style="margin-top:14px">Click a key to press it. Dim icon = off.</p><button class="btn" data-act="keymap-reset">Reset layout</button></div>'+
+   '<div class="sec" style="max-width:420px"><h2>How it works</h2><p class="sd">Tap a key to toggle. When a feature wants your attention, its key can light up in a colour or show your image (Keypad colour feedback).</p><div class="grp">Keys 8 and 9</div><p class="sd"><b>Master</b> pauses everything at once. <b>Presenting</b> turns on a silent profile: pace, volume and privacy only, with no sounds or pop-ups the audience could notice.</p></div></div>';
+}
+function renderProfiles(){
+  $("#main").innerHTML='<h1>Profiles</h1><p class="sub">A profile switches several features at once. Tap the Presenting key on the keypad to jump in and out.</p><div class="grid">'+
+   Object.entries(PROFILES).map(([k,p])=>'<div class="card"><div class="head"><div class="ttl"><b>'+p.label+"</b><span>"+p.desc+"</span></div>"+(S.profile===k?'<span class="chip"><i></i>Active</span>':"")+'</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+p.on.map(i=>'<img class="px" style="width:32px;height:32px" src="'+iconSrc(i)+'" title="'+F[i].name+'" alt="">').join("")+"</div>"+
+   '<div class="sum">'+(p.mute.length?"Muted: "+p.mute.join(", "):"Nothing muted")+'</div><div class="cardfoot"><span></span><button class="btn pri" data-act="profile-apply" data-v="'+k+'">Use profile</button></div></div>').join("")+"</div>";
+}
+function renderSettings(){
+  $("#main").innerHTML='<h1>Devices & data</h1><p class="sub">Everything stays on your computer. Nothing is uploaded.</p>'+
+   '<div class="sec"><h2>Devices (mock)</h2>'+[["Camera","LogiInsight prototype camera, 192.168.1.10"],["MX Keypad","9 LCD keys"],["MX Master 4","Haptic feedback available"],["Microphone","Camera 2-mic array, 48 kHz"]].map(x=>'<div class="row"><div class="lbl"><b>'+x[0]+"</b><small>"+x[1]+'</small></div><div class="ctl"><span class="chip"><i></i>Connected</span></div></div>').join("")+"</div>"+
+   '<div class="sec"><h2>Settings file</h2><p class="sd">The same JSON can later be read by the Options+ plugin.</p><div class="inline"><button class="btn" data-act="export">Export JSON</button><label class="btn">Import JSON<input type="file" accept="application/json" data-act="import" style="display:none"></label><button class="btn danger" data-act="wipe">Reset everything</button></div>'+(saveWarn?'<p class="warnbox">Some uploads are too large to keep after closing. They still work this session.</p>':"")+"</div>"+
+   '<div class="sec"><h2>Hook for the real detectors</h2><p class="sd">Later, the camera and microphone code calls this, and everything above (cooldown, silent profile, feedback types) is applied for you:</p><kbd>DeskCoach.trigger("speed","text")</kbd></div>';
+}
+
+/* ============ render / route ============ */
+function renderMain(){
+  const sc=$("#main").scrollTop, r=ui.route.split("/");
+  if(r[0]==="f") renderDetail(r[1]); else if(r[0]==="keypad") renderKeypadPage(); else if(r[0]==="profiles") renderProfiles(); else if(r[0]==="settings") renderSettings(); else renderDash();
+  $("#main").scrollTop=sc;
+}
+function renderAll(){ renderSide(); renderMain(); renderRail(); }
+function route(){ ui.route=(location.hash||"#/").replace(/^#\/?/,""); $("#main").scrollTop=0; renderAll(); }
+addEventListener("hashchange",route);
+
+/* ============ concept feature + keypad timer ============ */
+function conceptCard(d){
+  return '<div class="card concept"><div class="head"><div class="ico"><img class="px" src="'+iconSrc(d.id,false)+'" alt=""></div><div class="ttl"><b>'+d.name+"</b><span>"+d.blurb+'</span></div><span class="badge">Concept</span></div>'+
+   '<div class="sum">Needs a camera that reports brightness. Planned: monitor, keyboard backlight and room lights.</div><div class="cardfoot"><span></span><button class="btn" data-act="go" data-to="f/'+d.id+'">What is planned ›</button></div></div>';
+}
+function renderConcept(d){
+  const groups=[]; d.params.forEach(p=>{ if(p.g) groups.push({g:p.g,items:[]}); if(p.k!=="auto"&&groups.length) groups[groups.length-1].items.push(p); });
+  $("#main").innerHTML='<div class="crumb"><button data-act="go" data-to="">‹ Dashboard</button> / '+d.name+"</div>"+
+   '<div class="dhead"><div class="ico"><img class="px" src="'+iconSrc(d.id,false)+'" alt=""></div><div class="grow"><h1>'+d.name+'</h1><p class="sub" style="margin:0">Future feature</p></div><span class="badge">Concept</span></div>'+
+   '<div class="sec"><h2>Why it is not built yet</h2><p class="sd" style="margin-top:8px">The LogiInsight camera does not report brightness data (confirmed by Logitech). Any camera that does can drive this feature, and the plan below is ready for it. In the demo it is shown with a laptop camera that has brightness control.</p></div>'+
+   '<div class="sec"><h2>Planned behaviour</h2><p class="sd">Read-only preview of the settings it will have.</p>'+
+   groups.map(g=>'<div class="grp">'+g.g+"</div>"+(g.items.length?g.items.map(p=>'<div class="row"><div class="lbl"><b>'+p.label+"</b>"+(p.help?"<small>"+p.help+"</small>":"")+'</div><div class="ctl"><b>'+(p.type==="toggle"?(p.def?"On":"Off"):p.type==="select"?p.def:fmtP(p,p.def))+"</b></div></div>").join(""):'<p class="sd">Adjusts automatically when the room is too dark or too bright.</p>')).join("")+"</div>"+
+   '<div class="sec"><h2>Feedback and cooldown</h2><p class="sd">Same as every other feature: audio, screen, mouse haptics and keypad colour, with a cooldown of '+fmtT(d.cd.def)+".</p></div>";
+}
+function timerMode(){ return !!(ui.pomo&&ui.keyTimer&&S.master&&S.features.pomodoro.enabled); }
+function pomoSwitch(on){ if(!ui.pomo) return; if(remote){ S.features.pomodoro.enabled=on; ui.keyTimer=on; return; } S.features.pomodoro.enabled=on; ui.keyTimer=on; ui.pomo.run=on; if(on&&ui.pomo.left<=0) ui.pomo.left=S.features.pomodoro.params.work*60; pomoPaint(); }
+function timerKeypad(){
+  const P=ui.pomo, p=S.features.pomodoro.params, work=P.phase==="work";
+  const mm=String(Math.floor(P.left/60)).padStart(2,"0"), ss=String(P.left%60).padStart(2,"0");
+  const away=P.away&&p.cam, col=!P.run?"#8a93a6":work?(P.left<=60?"#ffb020":"#ff6b6b"):"#2ee6a8";
+  const sub=away?"AWAY, PAUSED":!P.run?"PAUSED":work?"AT DESK":"BREAK";
+  const fx='<div class="fx"></div>';
+  return '<div class="kp mini timer">'+
+   '<button class="key" data-key="0" data-act="tkey" data-t="reset"><img class="px" src="'+iconSrc("pomodoro")+'" alt="">'+fx+"</button>"+
+   '<div class="key span2" data-key="1"><span class="kt" style="color:'+col+'">'+(work?"FOCUS "+P.round+"/"+p.rounds:P.phase==="long"?"LONG BREAK":"SHORT BREAK")+"<small>"+sub+"</small></span>"+fx+"</div>"+
+   '<div class="key span3" data-key="4"><span class="kt big" style="color:'+col+'">'+mm+":"+ss+"</span>"+fx+"</div>"+
+   '<button class="key" data-key="6" data-act="tkey" data-t="reset"><span class="kt">RESET</span>'+fx+"</button>"+
+   '<button class="key" data-key="7" data-act="tkey" data-t="run"><span class="kt" style="font-size:20px">'+(P.run?"❚❚":"▶")+"</span>"+fx+"</button>"+
+   '<button class="key" data-key="8" data-act="tkey" data-t="skip"><span class="kt">SKIP</span>'+fx+"</button></div>";
+}
+/* ============ pomodoro ============ */
+function initPomo(){
+  const P=ui.pomo={phase:"work",round:1,run:false,away:false,left:0,t:null,awayT:null,paused:false,
+    label(){ const p=S.features.pomodoro.params; return this.phase==="work"?"Focus "+this.round+" of "+p.rounds:this.phase==="short"?"Short break":"Long break"; }};
+  P.left=S.features.pomodoro.params.work*60;
+  P.t=setInterval(()=>{ if(remote||!P.run) return; P.left--; if(P.left<=0) pomoNext(true); pomoPaint(); },1000);
+}
+function pomoPaint(){ const P=ui.pomo; if(!P) return;
+  const ch=$("#pchip"); if(ch) ch.textContent=P.away?"You are away":"At desk";
+  const a=$("#ptime"); if(a){ a.textContent=String(Math.floor(P.left/60)).padStart(2,"0")+":"+String(P.left%60).padStart(2,"0"); $("#pphase").textContent=P.label(); const b=$("#prun"); if(b) b.textContent=P.run?"Pause":"Start"; }
+  const rk=$("#railkp"); if(rk&&timerMode()) rk.innerHTML=keypadHTML("mini",false); }
+function pomoNext(done){
+  const P=ui.pomo, p=S.features.pomodoro.params;
+  if(P.phase==="work"){ if(done) fire("pomodoro",{text:"text"}); if(P.round>=p.rounds){ P.phase="long"; P.left=p.long*60; P.round=1; } else { P.phase="short"; P.left=p.short*60; } }
+  else { if(done) fire("pomodoro",{text:"text2"}); if(P.phase==="short") P.round++; P.phase="work"; P.left=p.work*60; }
+  P.run=!!(done&&p.auto); pomoPaint();
+}
+
+/* ============ events ============ */
+function readFile(file,cb){ const r=new FileReader(); r.onload=()=>cb(r.result); r.readAsDataURL(file); }
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-act]"); if(!t) return; const a=t.dataset.act, id=t.dataset.id, f=id&&S.features[id];
+  switch(a){
+   case "go": location.hash="#/"+t.dataset.to; break;
+   case "theme": S.theme={auto:"light",light:"dark",dark:"auto"}[S.theme]; applyTheme(); save(); renderSide(); break;
+   case "master": S.master=!S.master; save(); renderAll(); break;
+   case "toggle": setEnabled(id,!f.enabled); break;
+   case "ch": f.ch[t.dataset.c]=!f.ch[t.dataset.c]; if(f.ch[t.dataset.c]) ui.tab[id]=t.dataset.c; save(); renderMain(); break;
+   case "test": if(t.dataset.only) fire(id,{force:true,only:t.dataset.only,text:t.dataset.text}); else { CH.some(c=>f.ch[c])?fire(id,{force:true}):addLog(F[id].name+": no feedback type selected"); } break;
+   case "sim": fire(id,{}); break;
+   case "tab": ui.tab[id]=t.dataset.c; renderMain(); break;
+   case "ptoggle": f.params[t.dataset.k]=!f.params[t.dataset.k]; save(); renderMain(); break;
+   case "presetp": f.params[t.dataset.k]=F[id].params.find(p=>p.k===t.dataset.k).def; save(); renderMain(); break;
+   case "reset-params": { const n=makeFeature(F[id]); f.params=n.params; f.cooldown=n.cooldown; save(); renderMain(); break; }
+   case "reset-fb": { const n=makeFeature(F[id]); f.fb=n.fb; f.ch=n.ch; save(); renderMain(); break; }
+   case "cd-reset": f.cooldown=F[id].cd.def; save(); renderMain(); break;
+   case "fbset": f.fb[t.dataset.c][t.dataset.k]=t.dataset.num?+t.dataset.v:t.dataset.v; save(); renderMain(); break;
+   case "sound": f.fb.audio.sound=t.dataset.v; save(); renderMain(); fire(id,{force:true,only:"audio"}); break;
+   case "haptic": f.fb.haptic.pattern=t.dataset.v; save(); renderMain(); doHaptic(id); break;
+   case "color": f.fb.keypad.color=t.dataset.v; save(); renderMain(); break;
+   case "clearimg": f.fb[t.dataset.c].img=null; f.fb[t.dataset.c].imgName=""; save(); renderMain(); break;
+   case "key": pressKey(+t.dataset.key); break;
+   case "keymap-reset": S.keymap=defaults().keymap; save(); renderAll(); break;
+   case "profile-apply": applyProfile(t.dataset.v); break;
+   case "rec-sc": recordShortcut(id,t.dataset.k,t); break;
+   case "rec-voice": toggleRecord(id); break;
+   case "pomo-run": if(remote){ plugPost("/pomodoro/toggle"); break; } ui.pomo.run=!ui.pomo.run; pomoPaint(); break;
+   case "pomo-skip": if(remote){ plugPost("/pomodoro/skip"); break; } pomoNext(false); break;
+   case "pomo-reset": { if(remote){ plugPost("/pomodoro/reset"); break; } const P=ui.pomo; P.phase="work"; P.round=1; P.run=false; P.left=S.features.pomodoro.params.work*60; pomoPaint(); break; }
+   case "pomo-away": { const P=ui.pomo, c=S.features.pomodoro.params; if(remote){ plugPost("/presence",{atDesk:P.away}); break; } P.away=!P.away;
+      if(c.cam){
+        if(P.away){ P.awayAt=Date.now(); P.awayBonus=0; if(P.run){ P.run=false; P.paused=true; addLog("Pomodoro <b>paused</b> (you left)"); } }
+        else { const mins=((Date.now()-P.awayAt)+P.awayBonus)/60000;
+          if(mins>=c.reset){ P.phase="work"; P.round=1; P.left=c.work*60; P.run=!!P.paused; P.paused=false; addLog("Pomodoro <b>reset</b> (away "+Math.round(mins)+" min)"); }
+          else if(P.paused){ P.paused=false; P.run=true; addLog("Pomodoro <b>resumed</b> (you are back)"); } } }
+      pomoPaint(); renderMain(); break; }
+   case "pomo-away5": { if(remote){ plugPost("/pomodoro/demo-away"); break; } const P=ui.pomo; P.awayBonus+=S.features.pomodoro.params.reset*60000; addLog("Demo: pretend "+S.features.pomodoro.params.reset+" min passed"); t.textContent="Done. Now press “I am back”"; break; }
+   case "tkey": { const P=ui.pomo, k=t.dataset.t;
+      if(remote){ if(k==="run"&&!(P.away&&S.features.pomodoro.params.cam)) plugPost("/pomodoro/toggle"); if(k==="skip") plugPost("/pomodoro/skip"); if(k==="reset") plugPost("/pomodoro/reset"); break; }
+      if(k==="run"&&!(P.away&&S.features.pomodoro.params.cam)){ P.run=!P.run; pomoPaint(); }
+      if(k==="skip") pomoNext(false);
+      if(k==="reset"){ P.phase="work"; P.round=1; P.run=false; P.left=S.features.pomodoro.params.work*60; pomoPaint(); }
+      break; }
+   case "export": { const b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"}), u=URL.createObjectURL(b), l=document.createElement("a"); l.href=u; l.download="desk-coach-settings.json"; l.click(); setTimeout(()=>URL.revokeObjectURL(u),1000); break; }
+   case "wipe": if(confirm("Reset all Desk Coach settings?")){ S=defaults(); save(); renderAll(); } break;
+  }
+});
+document.addEventListener("input",e=>{
+  const t=e.target, a=t.dataset.act; if(!a) return; const id=t.dataset.id, f=id&&S.features[id];
+  if(a==="prange"){ const p=F[id].params.find(p=>p.k===t.dataset.k); f.params[p.k]=+t.value; t.nextElementSibling.textContent=fmtP(p,t.value); const rs=t.parentElement.querySelector(".rs"); if(rs) rs.classList.toggle("chg",+t.value!==p.def); save(); }
+  if(a==="cd"){ f.cooldown=+t.value; $("#cdout").textContent=fmtT(f.cooldown); t.parentElement.querySelector(".rs").classList.toggle("chg",f.cooldown!==F[id].cd.def); save(); }
+  if(a==="fbnum"){ f.fb[t.dataset.c][t.dataset.k]=+t.value; t.nextElementSibling.textContent=t.value+t.dataset.unit; save(); }
+  if(a==="fbtext"){ f.fb.screen.texts[t.dataset.k]=t.value; save(); }
+  if(a==="colorin"){ f.fb.keypad.color=t.value; save(); }
+});
+document.addEventListener("change",e=>{
+  const t=e.target, a=t.dataset.act; if(!a) return; const id=t.dataset.id, f=id&&S.features[id];
+  if(a==="psel"){ f.params[t.dataset.k]=t.value; save(); renderMain(); }
+  if(a==="fbsel"){ f.fb[t.dataset.c][t.dataset.k]=t.value; save(); }
+  if(a==="profile"){ if(t.value!=="custom") applyProfile(t.value); }
+  if(a==="keymap"){ S.keymap[+t.dataset.i]=t.value; save(); renderAll(); }
+  if(a==="colorin") renderMain();
+  if(a==="file"&&t.files[0]){ const file=t.files[0], k=t.dataset.t;
+    readFile(file,url=>{ const c=f.fb[k]; if(k==="audio"){ c.file=url; c.fname=file.name; } else { c.img=url; c.imgName=file.name; } if(url.length>1500000) saveWarn=true; save(); renderMain(); }); }
+  if(a==="import"&&t.files[0]){ t.files[0].text().then(x=>{ try{ S=merge(defaults(),JSON.parse(x)); save(); applyTheme(); renderAll(); }catch(err){ alert("That file is not valid settings JSON."); } }); }
+});
+
+/* ---- shortcut + voice recording ---- */
+function recordShortcut(id,k,btn){
+  btn.textContent="Press keys…"; const out=$("#sc-"+id);
+  const h=ev=>{ ev.preventDefault();
+    if(ev.key==="Escape"){ done(S.features[id].params[k]); return; }
+    if(["Meta","Control","Alt","Shift"].includes(ev.key)) return;
+    const parts=[ev.metaKey&&"⌘",ev.ctrlKey&&"Ctrl",ev.altKey&&"⌥",ev.shiftKey&&"⇧",ev.key.length===1?ev.key.toUpperCase():ev.key].filter(Boolean);
+    if(parts.length<2){ return; } const v=parts.join(" "); S.features[id].params[k]=v; save(); done(v); };
+  const done=v=>{ removeEventListener("keydown",h,true); out.textContent=v; btn.textContent="Record"; };
+  addEventListener("keydown",h,true);
+}
+async function toggleRecord(id){
+  const err=()=>$("#recerr");
+  if(ui.rec&&ui.rec.id===id){ ui.rec.mr.stop(); return; }
+  if(!navigator.mediaDevices||!window.MediaRecorder){ if(err()) err().textContent="Recording is not supported in this browser."; return; }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true}), mr=new MediaRecorder(stream), chunks=[];
+    mr.ondataavailable=e=>chunks.push(e.data);
+    mr.onstop=()=>{ stream.getTracks().forEach(t=>t.stop()); readFile(new Blob(chunks,{type:mr.mimeType}),url=>{ S.features[id].fb.audio.rec=url; ui.rec=null; save(); renderMain(); }); };
+    ui.rec={id,mr}; mr.start(); renderMain();
+    setTimeout(()=>{ if(ui.rec&&ui.rec.mr===mr&&mr.state==="recording") mr.stop(); },15000);
+  }catch(e){ ui.rec=null; renderMain(); if(err()) err().textContent="Microphone access was blocked. Allow it in the browser to record."; }
+}
+function applyTheme(){ if(S.theme==="auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme",S.theme); }
+
+/* public hook for the real detectors */
+window.DeskCoach={ trigger:(id,text)=>F[id]?fire(id,{text:text||"text"}):false, state:()=>S };
+applyTheme(); initPomo(); route(); connect();
+</script>
+</body>
+</html>

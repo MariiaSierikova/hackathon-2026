@@ -5,7 +5,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
     using System.Linq;
 
     // What actually reaches the user for one trigger.
-    public record Decision(TriggerMessage Message, Boolean Haptic, Boolean Visual, Boolean Overlay, String HapticStrength);
+    public record Decision(TriggerMessage Message, Boolean Haptic, Boolean Visual, Boolean Overlay, String HapticStrength, TriggerRule Rule = null, Boolean Audio = false);
 
     // Sits between raw triggers (camera/mic) and the outputs (mouse, Keypad, overlay) so alerts never become annoying.
     // Rules, in order: snooze -> enabled -> min severity -> episode/escalation -> cooldown (stretched after dismissals) -> budget.
@@ -124,8 +124,16 @@ namespace Loupedeck.WorkHealthCoachPlugin
             if (m.Force)
             {
                 // Development switch: show/buzz everything, ignore cooldowns, budget and snooze, leave the policy state untouched.
-                PluginLog.Info($"Policy: {m.Trigger} FORCED (policy skipped)");
-                return new Decision(m, Settings.HapticStrength != "off", true, true, Settings.HapticStrength);
+                PluginLog.Info($"Policy: {m.Trigger} FORCED (policy skipped){(m.Only != null ? " only " + m.Only : String.Empty)}");
+                Settings.Triggers.TryGetValue(m.Trigger, out var forcedRule);
+                var all = m.Only == null;
+                return new Decision(m, (all || m.Only == "haptic") && Settings.HapticStrength != "off", all || m.Only == "keypad",
+                    all || m.Only == "screen", Settings.HapticStrength, forcedRule, all || m.Only == "audio");
+            }
+
+            if (!Settings.Master)
+            {
+                return Drop(m, "master switch off");
             }
 
             if (!Settings.Triggers.TryGetValue(m.Trigger, out var rule))
@@ -190,7 +198,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
 
                     st.VisualShownInEpisode = true;
                     PluginLog.Info($"Policy: {m.Trigger} -> visual only (mouse after {rule.HapticAfterSec}s if it persists)");
-                    return new Decision(m, false, rule.Visual, rule.Overlay, Settings.HapticStrength);
+                    return Make(m, rule, false);
                 }
 
                 // Delivered: starts cooldown and uses one budget slot.
@@ -198,8 +206,20 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 st.Fired.Add(now);
                 st.VisualShownInEpisode = true;
                 PluginLog.Info($"Policy: {m.Trigger} -> {(wantHaptic ? "haptic " : string.Empty)}{(rule.Visual ? "visual " : string.Empty)}{(rule.Overlay ? "overlay" : string.Empty)} [{Settings.HapticStrength}, {Settings.Preset}]");
-                return new Decision(m, wantHaptic, rule.Visual, rule.Overlay, Settings.HapticStrength);
+                return Make(m, rule, wantHaptic);
             }
+        }
+
+        // Applies the profile's muted channels on top of the per-trigger rule.
+        private static Decision Make(TriggerMessage m, TriggerRule rule, Boolean haptic)
+        {
+            var muted = Settings.Muted ?? new List<String>();
+            return new Decision(m,
+                haptic && !muted.Contains("haptic"),
+                rule.Visual && !muted.Contains("keypad"),
+                rule.Overlay && !muted.Contains("screen"),
+                Settings.HapticStrength, rule,
+                rule.Audio && !muted.Contains("audio"));
         }
 
         private static Decision Drop(TriggerMessage m, String why)

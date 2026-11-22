@@ -44,6 +44,32 @@ namespace Loupedeck.WorkHealthCoachPlugin
         private static DateTime _behindUntil = DateTime.MinValue;
         public static Boolean BehindActive => DateTime.UtcNow < _behindUntil;
 
+        // Generic full-Keypad reminder for the newer triggers (speak_up, speak_down, break_due, break_over, volume_far).
+        public static String[] GenericLines { get; private set; } = Array.Empty<String>();
+        public static (Int32 r, Int32 g, Int32 b) GenericColor { get; private set; } = (60, 120, 230);
+        private static DateTime _genericUntil = DateTime.MinValue;
+        public static Boolean GenericActive => DateTime.UtcNow < _genericUntil;
+
+        private static void SetGeneric(String[] lines, (Int32 r, Int32 g, Int32 b) color, Int32 seconds, TriggerRule rule)
+        {
+            GenericLines = lines;
+            GenericColor = TryHex(rule?.KeypadColor) ?? color;
+            _genericUntil = DateTime.UtcNow.AddSeconds(seconds);
+        }
+
+        // "#rrggbb" -> colour, or null when it is missing or malformed.
+        public static (Int32 r, Int32 g, Int32 b)? TryHex(String hex)
+        {
+            if (String.IsNullOrEmpty(hex) || hex.Length != 7 || hex[0] != '#')
+            {
+                return null;
+            }
+
+            return Int32.TryParse(hex.AsSpan(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var v)
+                ? ((v >> 16) & 255, (v >> 8) & 255, v & 255)
+                : null;
+        }
+
         // ---- on-screen animal (separate from the Keypad: the policy can allow one and not the other) ----
         private static String _overlayAnimal;
         private static DateTime _overlayStart;
@@ -100,7 +126,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
             }
         }
 
-        public static Boolean TakeoverActive => EyeAlertActive || PaceAlertActive || TimeAlertActive || BehindActive;
+        public static Boolean TakeoverActive => EyeAlertActive || PaceAlertActive || TimeAlertActive || BehindActive || GenericActive;
 
         // ---- last alert ----
         public static String LastTrigger { get; private set; }
@@ -208,6 +234,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
             _paceAlertUntil = DateTime.MinValue;
             _timeAlertUntil = DateTime.MinValue;
             _behindUntil = DateTime.MinValue;
+            _genericUntil = DateTime.MinValue;
             ClearOverlay();
             Raise();
         }
@@ -219,7 +246,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
         }
 
         // Updates screen state from a trigger the policy let through.
-        public static void OnTrigger(TriggerMessage m)
+        public static void OnTrigger(TriggerMessage m, TriggerRule rule = null)
         {
             LastTrigger = m.Trigger;
             LastTriggerAt = DateTime.UtcNow;
@@ -249,6 +276,21 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     break;
                 case "person_behind":
                     _behindUntil = now.AddSeconds(12);
+                    break;
+                case "speak_up":
+                    SetGeneric(new[] { "SPEAK", "UP" }, (60, 120, 230), 8, rule);
+                    break;
+                case "speak_down":
+                    SetGeneric(new[] { "LOWER", "VOICE" }, (230, 150, 60), 8, rule);
+                    break;
+                case "break_due":
+                    SetGeneric(new[] { "BREAK", "TIME" }, (50, 170, 110), 15, rule);
+                    break;
+                case "break_over":
+                    SetGeneric(new[] { "BACK TO", "FOCUS" }, (220, 80, 70), 8, rule);
+                    break;
+                case "volume_far":
+                    SetGeneric(new[] { "VOLUME", "UP" }, (130, 90, 220), 5, rule);
                     break;
             }
 

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Runs the plugin's server, policy, Pomodoro and settings code outside Options+ (no devices needed).
+       dotnet run -c Release -p:LinkPlugin=false      (from this folder; sets XDG_CONFIG_HOME itself, never touches real settings) -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Harness</RootNamespace>
+    <PluginApiDir Condition="$(OS) != 'Windows_NT'">/Applications/Utilities/LogiPluginService.app/Contents/MonoBundle/</PluginApiDir>
+    <PluginApiDir Condition="$(OS) == 'Windows_NT'">C:\Program Files\Logi\LogiPluginService\</PluginApiDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WorkHealthCoachPlugin.csproj" />
+    <!-- the real PluginApi.dll from the installed Logi Plugin Service, copied next to the harness for the Keypad drawing code -->
+    <None Include="$(PluginApiDir)PluginApi.dll" Link="PluginApi.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(PluginApiDir)PluginApi.dll')" />
+  </ItemGroup>
+
+</Project>

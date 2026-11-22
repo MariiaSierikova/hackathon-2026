@@ -13,12 +13,14 @@ namespace Loupedeck.WorkHealthCoachPlugin
     // Tiny localhost-only HTTP API. The camera/mic code (or scripts/trigger.py) sends triggers here.
     //   POST /trigger   {"trigger":"pace_too_fast","severity":0.8}
     //   GET  /health    GET /triggers    GET /overlay    GET/POST /settings    POST /preset /snooze /metrics
+    //   GET  /  (the settings page, embedded)    GET/POST /ui-state    GET /pomodoro    POST /pomodoro/<action>    POST /presence
     //
     // Plain TcpListener on 127.0.0.1 (not HttpListener): on Windows HttpListener needs admin rights / URL reservations
     // for some prefixes and fails silently for normal users; a loopback TcpListener works everywhere.
     public class LocalServer
     {
-        public const Int32 Port = 8787;
+        // 8787 for real use; WORKHEALTH_PORT lets tests run a second server without touching the plugin inside Options+.
+        public static readonly Int32 Port = Int32.TryParse(Environment.GetEnvironmentVariable("WORKHEALTH_PORT"), out var p) && p > 0 ? p : 8787;
 
         // When this plugin was built (stamped by MSBuild). Shown by /health and in the log, so a stale build is easy to
         // spot: on Windows a still-loaded DLL can make `dotnet build` leave the old plugin running.
@@ -95,7 +97,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 try
                 {
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-                    timeout.CancelAfter(TimeSpan.FromSeconds(5));
+                    timeout.CancelAfter(TimeSpan.FromSeconds(15));
                     var stream = client.GetStream();
 
                     // read until the end of the headers
@@ -142,7 +144,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                         body.Write(ms.GetBuffer(), headerEnd + 4, Math.Min(already, length));
                     }
 
-                    while (body.Length < length && body.Length < 1_000_000)
+                    while (body.Length < length && body.Length < 8_000_000)
                     {
                         var n = await stream.ReadAsync(buf, timeout.Token);
                         if (n == 0)
@@ -151,6 +153,12 @@ namespace Loupedeck.WorkHealthCoachPlugin
                         }
 
                         body.Write(buf, 0, n);
+                    }
+
+                    if (method == "GET" && StaticFiles.TryGet(path, out var fileBytes, out var fileType))
+                    {
+                        await Respond(stream, 200, fileType, fileBytes, timeout.Token);
+                        return;
                     }
 
                     (Int32 status, String json) result;
@@ -168,12 +176,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
                         result = (500, "{\"error\":\"server error\"}");
                     }
 
-                    var payload = Encoding.UTF8.GetBytes(result.json);
-                    var reason = result.status switch { 200 => "OK", 400 => "Bad Request", 404 => "Not Found", _ => "Error" };
-                    var header = $"HTTP/1.1 {result.status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
-                    await stream.WriteAsync(Encoding.ASCII.GetBytes(header), timeout.Token);
-                    await stream.WriteAsync(payload, timeout.Token);
-                    await stream.FlushAsync(timeout.Token);
+                    await Respond(stream, result.status, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(result.json), timeout.Token);
                 }
                 catch (Exception ex) when (ex is OperationCanceledException or IOException or SocketException)
                 {
@@ -184,6 +187,15 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     PluginLog.Error(ex, "LocalServer connection failed");
                 }
             }
+        }
+
+        private static async Task Respond(NetworkStream stream, Int32 status, String contentType, Byte[] payload, CancellationToken token)
+        {
+            var reason = status switch { 200 => "OK", 400 => "Bad Request", 404 => "Not Found", _ => "Error" };
+            var header = $"HTTP/1.1 {status} {reason}\r\nContent-Type: {contentType}\r\nCache-Control: no-cache\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(header), token);
+            await stream.WriteAsync(payload, token);
+            await stream.FlushAsync(token);
         }
 
         private static Int32 IndexOf(Byte[] data, Int32 length, Byte[] pattern)
@@ -261,6 +273,55 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 return (200, Ok);
             }
 
+            // ---- settings page ----
+            if (path == "/ui-state")
+            {
+                if (method == "GET")
+                {
+                    return (200, UiSettings.ToJson());
+                }
+
+                if (method == "POST")
+                {
+                    return UiSettings.Set(body, out var err)
+                        ? (200, $"{{\"ok\":true,\"rev\":{UiSettings.Rev}}}")
+                        : (400, $"{{\"error\":{JsonSerializer.Serialize(err)}}}");
+                }
+            }
+
+            if (method == "GET" && path == "/pomodoro")
+            {
+                return (200, PomodoroState.ToJson());
+            }
+
+            if (method == "POST" && path.StartsWith("/pomodoro/", StringComparison.Ordinal))
+            {
+                switch (path.Substring("/pomodoro/".Length))
+                {
+                    case "start": UiSettings.SetFeatureEnabled("pomodoro", true); break;   // feature on == timer on the Keypad
+                    case "stop": UiSettings.SetFeatureEnabled("pomodoro", false); break;
+                    case "toggle": PomodoroState.TogglePause(); break;
+                    case "skip": PomodoroState.Skip(); break;
+                    case "reset": PomodoroState.Reset(); break;
+                    case "demo-away": PomodoroState.DemoSkipAway(); break;
+                    default: return (404, "{\"error\":\"unknown pomodoro action\"}");
+                }
+
+                return (200, PomodoroState.ToJson());
+            }
+
+            if (method == "POST" && path == "/presence")
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("atDesk", out var at) || at.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                {
+                    return (400, "{\"error\":\"send {\\\"atDesk\\\":true|false}\"}");
+                }
+
+                PomodoroState.SetPresence(at.GetBoolean());
+                return (200, Ok);
+            }
+
             if (method == "POST" && path == "/trigger")
             {
                 using var doc = JsonDocument.Parse(body);
@@ -274,8 +335,9 @@ namespace Loupedeck.WorkHealthCoachPlugin
                 }
 
                 var force = root.TryGetProperty("force", out var f) && f.ValueKind == JsonValueKind.True;
-                PluginLog.Info($"Trigger received: {trigger} severity={severity}{(force ? " FORCE" : String.Empty)}");
-                TriggerBus.Publish(new TriggerMessage(trigger, severity, force));
+                var only = root.TryGetProperty("only", out var on0) && on0.ValueKind == JsonValueKind.String ? on0.GetString() : null;
+                PluginLog.Info($"Trigger received: {trigger} severity={severity}{(force ? " FORCE" : String.Empty)}{(only != null ? " only=" + only : String.Empty)}");
+                TriggerBus.Publish(new TriggerMessage(trigger, severity, force, only));
                 return (200, Ok);
             }
 
@@ -303,6 +365,13 @@ namespace Loupedeck.WorkHealthCoachPlugin
                     if (on == null)
                     {
                         return (400, "{\"error\":\"use true or false\"}");
+                    }
+
+                    // camera presence for the Pomodoro timer: /signal/presence/true (someone at the desk) | false
+                    if (name == "presence")
+                    {
+                        PomodoroState.SetPresence(on == true);
+                        return (200, Ok);
                     }
 
                     var q = ParseQuery(query);

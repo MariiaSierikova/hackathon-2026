@@ -10,3 +10,11 @@ haptics:
         DEFAULT: knock
     pulseDone:
         DEFAULT: completed
+    hapticTap:
+        DEFAULT: sharp_state_change
+    hapticBump:
+        DEFAULT: damp_collision
+    hapticAlert:
+        DEFAULT: angry_alert
+    hapticJingle:
+        DEFAULT: jingle
