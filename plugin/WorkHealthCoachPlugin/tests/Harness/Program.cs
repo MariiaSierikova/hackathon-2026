@@ -43,6 +43,22 @@ if (args.Length == 2 && args[0] == "--render")
     Save("reminder_speak_up", KeypadScreen.Build());
     SessionState.OnTrigger(new TriggerMessage("break_over", 1.0));
     Save("reminder_break_over", KeypadScreen.Build());
+    // one Desk Coach widget key while an alert is active (every widget key draws this)
+    void SaveKey(String name)
+    {
+        var img = KeypadScreen.AlertKey(116);
+        Console.WriteLine($"{name}: {(img == null ? "NO ALERT" : img.SaveToFile(Path.Combine(args[1], name + ".png")))}");
+    }
+
+    SessionState.DismissAlert();
+    foreach (var (t, n) in new[] { ("person_behind", "key_behind"), ("break_due", "key_break_due"), ("speak_up", "key_speak_up"), ("break_over", "key_break_over"),
+                                   ("blink_low", "key_blink"), ("pace_too_fast", "key_pace"), ("time_warning", "key_time") })
+    {
+        SessionState.OnTrigger(new TriggerMessage(t, 1.0));
+        SaveKey(n);
+        SessionState.DismissAlert();
+    }
+
     return 0;
 }
 
@@ -574,7 +590,7 @@ try
 
     UiSettings.Set("""{"master":true,"profile":"everyday","muted":[],"features":{"speed":{"enabled":true},"volume":{"enabled":true},"blink":{"enabled":true},"pomodoro":{"enabled":false},"distance":{"enabled":true},"behind":{"enabled":true}}}""", out _);
     var baseline = Snapshot();
-    Check("there are 8 keys", FeatureToggleCommand.AllKeys.Length == 8);
+    Check("there are 9 keys (8 switches + the Alert light)", FeatureToggleCommand.AllKeys.Length == 9);
     Check("all key images draw", baseline.Values.All(b => b.Length > 100));
     Check("different keys look different", baseline["speed"].SequenceEqual(baseline["volume"]) == false);
 
@@ -644,6 +660,16 @@ try
     NotificationPolicy.Evaluate(new TriggerMessage("break_due", 1.0, true));
     SessionState.OnTrigger(new TriggerMessage("break_due", 1.0), new TriggerRule { KeypadColor = "#123456" });
     Check("generic reminder scene draws", SessionState.GenericActive && KeypadScreen.Build().Tile(0, 0, 116) != null);
+    SessionState.DismissAlert();
+    Check("widget keys draw nothing special without an alert", KeypadScreen.AlertKey(116) == null);
+    foreach (var t in new[] { "person_behind", "break_due", "speak_up", "blink_low", "pace_too_fast", "time_warning" })
+    {
+        SessionState.OnTrigger(new TriggerMessage(t, 1.0));
+        Check($"widget keys draw the alert for {t}", KeypadScreen.AlertKey(116) != null && KeypadScreen.AlertKey(80) != null);
+        SessionState.DismissAlert();
+    }
+
+    Check("a dismissed alert leaves the widget keys alone", !SessionState.TakeoverActive && KeypadScreen.AlertKey(116) == null);
 }
 catch (Exception ex)
 {
