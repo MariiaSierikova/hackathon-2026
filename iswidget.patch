@@ -1,0 +1,44 @@
+From 59be734634d2fa3ffe838fffb777b3894a780536 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 08:25:14 +0000
+Subject: [PATCH] Widget keys: IsWidget = true so the image fills the whole key
+ (no label strip), the nine alert tiles line up
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ docs/SETTINGS_UI.md                                           | 2 +-
+ .../WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs | 4 ++++
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/docs/SETTINGS_UI.md b/docs/SETTINGS_UI.md
+index d67dd0e..5dc97d8 100644
+--- a/docs/SETTINGS_UI.md
++++ b/docs/SETTINGS_UI.md
+@@ -43,7 +43,7 @@ The page offers four patterns per feature. Events and waveforms (`package/events
+   | row 3 | Master switch | Presenting mode | **Alert light** |
+ 
+   In any other order the picture is scrambled (cells: `FeatureToggleCommand.Cells`). A key press during an alert dismisses it. The tiles are cut from one snapshot (150 ms) so the flashing
+-  stays in step. While an alert shows, the key's name text is replaced by a blank space (Options+ otherwise writes the name over the picture; not verified on the real Keypad).
++  stays in step. The widget command sets `IsWidget = true` (Logitech docs, "Display Modes"): without it Options+ reserves a text-label strip under the image and the tiles do not line up. While an alert shows, the key's name text is replaced by a blank space (Options+ otherwise writes the name over the picture; not verified on the real Keypad).
+ - **New reminders** take over the whole Keypad like the eye and snail do: SPEAK UP, LOWER VOICE, BREAK TIME (green), BACK TO FOCUS, VOLUME UP. Colour comes from the page's Keypad colour (image upload is stored but not drawn yet).
+ - **Pomodoro timer** in the Coach screen folder (same layout as the idle screen): top = FOCUS 1 OF 4 + AT DESK / AWAY / PAUSED / REST, middle = huge MM:SS, bottom = reset / play-pause / skip. Limit from the handoff: a folder cannot be opened by code, so the user presses the Coach screen key once; the Pomodoro feature key shows the countdown without opening anything.
+ 
+diff --git a/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs b/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
+index 4ea4a59..fc7fbbd 100644
+--- a/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
++++ b/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
+@@ -24,6 +24,10 @@ namespace Loupedeck.WorkHealthCoachPlugin
+         public FeatureToggleCommand()
+             : base()
+         {
++            // Icon-only key (Logitech docs, "Display Modes"): without IsWidget Options+ reserves a text-label strip under the image, so the
++            // picture does not fill the key and the nine alert tiles cannot line up. As a widget the image covers the whole key.
++            this.IsWidget = true;
++
+             foreach (var (id, name) in Features)
+             {
+                 this.AddParameter(id, name, Group);
+-- 
+2.43.0
+

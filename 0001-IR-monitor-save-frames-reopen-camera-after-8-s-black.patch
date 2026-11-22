@@ -1,0 +1,99 @@
+From 438674e6206b4cf15c19553467350c10efac55d4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 10:12:16 +0000
+Subject: [PATCH] IR monitor: --save-frames, reopen camera after 8 s black,
+ CLAHE fallback
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ brain/src/brain/monitors/behind_monitor.py | 31 ++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/brain/src/brain/monitors/behind_monitor.py b/brain/src/brain/monitors/behind_monitor.py
+index dcfb51c..1579acf 100644
+--- a/brain/src/brain/monitors/behind_monitor.py
++++ b/brain/src/brain/monitors/behind_monitor.py
+@@ -35,6 +35,7 @@ def add_args(ap):
+     ap.add_argument("--min-face", type=int, default=24, help="smallest face (pixels wide) to look for; smaller = sees people further away, more false alarms")
+     ap.add_argument("--preview", action="store_true", help="show the camera picture with boxes (green = you, red = others); Esc closes it")
+     ap.add_argument("--scan", action="store_true", help="try every camera number (0-9) and say which ones give a real picture (size, brightness, grey or colour): finds the infrared camera")
++    ap.add_argument("--save-frames", default=None, metavar="FOLDER", help="save a picture every 3 s (max 15, with boxes) into FOLDER so you can send them for tuning")
+     ap.add_argument("--image", default=None, help="NO camera: look at one picture file, print the faces and exit")
+ 
+ 
+@@ -71,6 +72,9 @@ def detect(gray, cascade, min_face=24):
+     g, _ = enhance(gray)
+     g = cv2.equalizeHist(g)
+     boxes = cascade.detectMultiScale(g, scaleFactor=1.1, minNeighbors=5, minSize=(min_face, min_face))
++    if len(boxes) == 0:                      # a washed-out infrared face: local contrast instead of global
++        g = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(enhance(gray)[0])
++        boxes = cascade.detectMultiScale(g, scaleFactor=1.1, minNeighbors=4, minSize=(min_face, min_face))
+     return [tuple(int(v) for v in b) for b in boxes]
+ 
+ 
+@@ -101,6 +105,7 @@ def scan(a, say=print):
+     """For every camera number: open it like the monitor does, skip the auto-exposure ramp, then report size, mean brightness and whether it is grey.
+     The infrared camera is grey and tall (portrait) and NOT black (mean above ~10)."""
+     import cv2
++    import numpy as np
+     from camera_utils import CameraNotFoundError, open_camera
+     say("Scanning camera numbers 0-9 (about 10 s each; keep still, face the camera) ...")
+     for idx in range(10):
+@@ -204,6 +209,9 @@ def run(a, stop, say=print):
+         cap.read()
+ 
+     last, t_status, frames, found, black_said, dim_said = 0.0, time.time(), 0, 0, False, False
++    black_since, saved, last_save = None, 0, 0.0
++    if a.save_frames:
++        Path(a.save_frames).mkdir(parents=True, exist_ok=True)
+     prev_gray, boxes, user, tracked, brightness, rng = None, [], None, [], 0.0, 0.0
+     try:
+         while not stop.is_set():
+@@ -213,6 +221,19 @@ def run(a, stop, say=print):
+                 continue
+             frames += 1
+             now = time.time()
++            if black_since is not None and now - black_since > 8:      # the stream stays black: open the camera again
++                say("picture stayed black for 8 s: opening the camera again")
++                cap.release()
++                time.sleep(1.0)
++                try:
++                    cap, info = open_camera(idx, backend, a.ir_width, a.ir_height, "MJPG", 30)
++                except RuntimeError as e:
++                    say(f"ERROR reopening: {e}")
++                    return
++                for _ in range(20):
++                    cap.read()
++                black_since, prev_gray = None, None
++                continue
+             g = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+             gray = merge_flicker(prev_gray, g)          # lit and unlit infrared frames alternate: use the brighter of two consecutive frames
+             prev_gray = g
+@@ -220,6 +241,10 @@ def run(a, stop, say=print):
+                 last = now
+                 brightness = float(gray.mean())
+                 _, rng = enhance(gray)
++                if rng < 2 and frames > 10:
++                    black_since = black_since or now
++                else:
++                    black_since = None
+                 if rng < 2 and frames > 10 and not black_said:
+                     black_said = True
+                     say("WARNING: the picture is BLACK (no image at all, range %.1f). Wrong camera number, or the infrared stream is not delivering. "
+@@ -231,6 +256,12 @@ def run(a, stop, say=print):
+                 faces = to_faces(boxes, gray.shape[1])
+                 user, tracked = handle(faces, now)
+                 found += len(boxes)
++                if a.save_frames and saved < 15 and now - last_save >= 3:
++                    last_save, saved = now, saved + 1
++                    out = cv2.cvtColor(enhance(gray)[0], cv2.COLOR_GRAY2BGR)
++                    for (x, y, w, h) in boxes:
++                        cv2.rectangle(out, (x, y), (x + w, y + h), (0, 200, 0), 2)
++                    cv2.imwrite(str(Path(a.save_frames) / f"ir_{saved:02d}_faces{len(boxes)}_b{brightness:.0f}_r{rng:.0f}.png"), np.hstack([cv2.cvtColor(g, cv2.COLOR_GRAY2BGR), out]))
+             if a.preview:                                # drawn on every frame (with the boxes of the last search), so it does not blink
+                 shown = cv2.cvtColor(enhance(gray)[0], cv2.COLOR_GRAY2BGR)
+                 ordered = sorted(boxes, key=lambda b: b[2], reverse=True)
+-- 
+2.43.0
+

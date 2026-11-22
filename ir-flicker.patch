@@ -1,0 +1,128 @@
+From c20cb35eafd3fb1cd8d742129a3494df79deff51 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 10:05:11 +0000
+Subject: [PATCH] behind_monitor: flicker filter (brighter of two consecutive
+ frames), preview drawn on every frame
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ brain/src/brain/monitors/behind_monitor.py | 47 +++++++++++++---------
+ brain/tests/test_behind.py                 | 11 +++++
+ docs/CAMERA_FEEDS.md                       |  6 +++
+ 3 files changed, 45 insertions(+), 19 deletions(-)
+
+diff --git a/brain/src/brain/monitors/behind_monitor.py b/brain/src/brain/monitors/behind_monitor.py
+index a88ebac..dcfb51c 100644
+--- a/brain/src/brain/monitors/behind_monitor.py
++++ b/brain/src/brain/monitors/behind_monitor.py
+@@ -58,6 +58,13 @@ def enhance(gray):
+     return np.clip(out, 0, 255).astype(np.uint8), rng
+ 
+ 
++def merge_flicker(prev, cur):
++    """The infrared light pulses: lit and unlit frames alternate (Logitech: 'IR picture flickers'). Per pixel the brighter of two consecutive frames
++    is always a lit picture (Logitech's example_IR.py --flicker-filter)."""
++    import numpy as np
++    return cur if prev is None or prev.shape != cur.shape else np.maximum(prev, cur)
++
++
+ def detect(gray, cascade, min_face=24):
+     """Boxes (x, y, w, h) of frontal faces in a grey picture (brightened first, see enhance)."""
+     import cv2
+@@ -197,6 +204,7 @@ def run(a, stop, say=print):
+         cap.read()
+ 
+     last, t_status, frames, found, black_said, dim_said = 0.0, time.time(), 0, 0, False, False
++    prev_gray, boxes, user, tracked, brightness, rng = None, [], None, [], 0.0, 0.0
+     try:
+         while not stop.is_set():
+             ok, frame = cap.read()
+@@ -205,25 +213,26 @@ def run(a, stop, say=print):
+                 continue
+             frames += 1
+             now = time.time()
+-            if now - last < a.behind_every:
+-                continue
+-            last = now
+-            gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+-            brightness = float(gray.mean())
+-            bright_img, rng = enhance(gray)
+-            if rng < 2 and frames > 10 and not black_said:
+-                black_said = True
+-                say("WARNING: the picture is BLACK (no image at all, range %.1f). Wrong camera number, or the infrared stream is not delivering. "
+-                    "Run:  behind_monitor.py --scan   to find the right number." % rng)
+-            elif brightness < 8 and rng >= 2 and not dim_said:
+-                dim_said = True
+-                say(f"note: the infrared picture is very dark (brightness {brightness:.0f}/255) but has an image (range {rng:.0f}); it is brightened before the search.")
+-            boxes = detect(gray, cascade, a.min_face)
+-            faces = to_faces(boxes, gray.shape[1])
+-            user, tracked = handle(faces, now)
+-            found += len(boxes)
+-            if a.preview:
+-                shown = cv2.cvtColor(bright_img, cv2.COLOR_GRAY2BGR)
++            g = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
++            gray = merge_flicker(prev_gray, g)          # lit and unlit infrared frames alternate: use the brighter of two consecutive frames
++            prev_gray = g
++            if now - last >= a.behind_every:
++                last = now
++                brightness = float(gray.mean())
++                _, rng = enhance(gray)
++                if rng < 2 and frames > 10 and not black_said:
++                    black_said = True
++                    say("WARNING: the picture is BLACK (no image at all, range %.1f). Wrong camera number, or the infrared stream is not delivering. "
++                        "Run:  behind_monitor.py --scan   to find the right number." % rng)
++                elif brightness < 8 and rng >= 2 and not dim_said:
++                    dim_said = True
++                    say(f"note: the infrared picture is very dark (brightness {brightness:.0f}/255) but has an image (range {rng:.0f}); it is brightened before the search.")
++                boxes = detect(gray, cascade, a.min_face)
++                faces = to_faces(boxes, gray.shape[1])
++                user, tracked = handle(faces, now)
++                found += len(boxes)
++            if a.preview:                                # drawn on every frame (with the boxes of the last search), so it does not blink
++                shown = cv2.cvtColor(enhance(gray)[0], cv2.COLOR_GRAY2BGR)
+                 ordered = sorted(boxes, key=lambda b: b[2], reverse=True)
+                 for k, (x, y, w, h) in enumerate(ordered):
+                     cv2.rectangle(shown, (x, y), (x + w, y + h), (0, 200, 0) if k == 0 else (0, 0, 255), 2)
+diff --git a/brain/tests/test_behind.py b/brain/tests/test_behind.py
+index 5152f0a..8733398 100644
+--- a/brain/tests/test_behind.py
++++ b/brain/tests/test_behind.py
+@@ -48,6 +48,17 @@ def test_face_width_from_the_gaze_tracker_snapshot():
+     assert face_width({"face": {"bounding_box_norm": {"width": 0}}}) is None
+ 
+ 
++def test_flicker_filter_gives_a_lit_picture_every_time():
++    import numpy as np
++    from brain.monitors.behind_monitor import enhance, merge_flicker  # noqa: PLC0415
++    lit = np.zeros((40, 30), np.uint8)
++    lit[10:30, 8:22] = 90                       # a face-like blob, only visible while the infrared light is on
++    unlit = np.zeros_like(lit)
++    assert merge_flicker(lit, unlit).max() == 90 and merge_flicker(unlit, lit).max() == 90
++    assert enhance(merge_flicker(lit, unlit))[1] > 2 and enhance(unlit)[1] < 2     # one dark frame alone is "black", merged it is not
++    assert merge_flicker(None, lit) is lit and merge_flicker(np.zeros((5, 5), np.uint8), lit) is lit   # different size: start over
++
++
+ if __name__ == "__main__":
+     for n, f in list(globals().items()):
+         if n.startswith("test_"):
+diff --git a/docs/CAMERA_FEEDS.md b/docs/CAMERA_FEEDS.md
+index b04ec1c..231f932 100644
+--- a/docs/CAMERA_FEEDS.md
++++ b/docs/CAMERA_FEEDS.md
+@@ -29,6 +29,12 @@ with a stable id, x position and size; the plugin decides (walk past = ignored,
+ warns `the picture is BLACK` and shows `brightness` in its status line. A black picture means a wrong number or an infrared stream that does not deliver (try with the Gaze Tracker running,
+ unplug and replug the camera, close other programs that use the camera). The camera docs note the first ~20 infrared frames are an auto-exposure ramp.
+ 
++## Flicker and very dark pictures (seen on the real camera)
++The infrared light pulses: **lit and unlit frames alternate** (every other frame is black, brightness 0), and the lit ones are very dark (brightness ~30, but range 255 after stretching).
++`behind_monitor.py` therefore (1) uses, per pixel, the brighter of two consecutive frames (Logitech's `--flicker-filter`), (2) stretches the 1st-99th percentile to 0-255 (Logitech's `stretch` mode)
++before the face search and in the preview, (3) draws the preview on every frame. Verified with a fake camera that alternates lit / unlit frames; with the Gaze Tracker running the infrared
++stream is ~1 frame per second (the colour stream is open as MJPG), so the preview is slow by nature.
++
+ ## Verified / not verified
+ - Verified here (no camera): the detector finds a second face in a picture; the simulated visitor and the simulated far-away person reach the real plugin logic and produce
+   one `person_behind` alert (mouse, Keypad, screen) and `ratio` 0.3 / back to 1.
+-- 
+2.43.0
+

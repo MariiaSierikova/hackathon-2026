@@ -1,0 +1,122 @@
+From 5d0a8e99514bde7b45ea37aac1598486900a5fca Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 09:50:26 +0000
+Subject: [PATCH] behind_monitor: --scan finds the infrared camera number,
+ black-picture warning, brightness in the status line
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ brain/src/brain/monitors/behind_monitor.py | 50 +++++++++++++++++++++-
+ docs/CAMERA_FEEDS.md                       |  5 +++
+ 2 files changed, 53 insertions(+), 2 deletions(-)
+
+diff --git a/brain/src/brain/monitors/behind_monitor.py b/brain/src/brain/monitors/behind_monitor.py
+index ca433e4..07c1d4f 100644
+--- a/brain/src/brain/monitors/behind_monitor.py
++++ b/brain/src/brain/monitors/behind_monitor.py
+@@ -34,6 +34,7 @@ def add_args(ap):
+     ap.add_argument("--behind-every", type=float, default=0.5, help="seconds between face searches")
+     ap.add_argument("--min-face", type=int, default=24, help="smallest face (pixels wide) to look for; smaller = sees people further away, more false alarms")
+     ap.add_argument("--preview", action="store_true", help="show the camera picture with boxes (green = you, red = others); Esc closes it")
++    ap.add_argument("--scan", action="store_true", help="try every camera number (0-9) and say which ones give a real picture (size, brightness, grey or colour): finds the infrared camera")
+     ap.add_argument("--image", default=None, help="NO camera: look at one picture file, print the faces and exit")
+ 
+ 
+@@ -76,7 +77,47 @@ class FakeVisitor:
+         return [you]
+ 
+ 
++def scan(a, say=print):
++    """For every camera number: open it like the monitor does, skip the auto-exposure ramp, then report size, mean brightness and whether it is grey.
++    The infrared camera is grey and tall (portrait) and NOT black (mean above ~10)."""
++    import cv2
++    from camera_utils import CameraNotFoundError, open_camera
++    say("Scanning camera numbers 0-9 (about 10 s each; keep still, face the camera) ...")
++    for idx in range(10):
++        try:
++            cap, info = open_camera(idx, None, a.ir_width, a.ir_height, "MJPG", 30)
++        except CameraNotFoundError:
++            say(f"  {idx}: cannot open")
++            continue
++        try:
++            means, last = [], None
++            t0 = time.time()
++            for _ in range(40):
++                ok, frame = cap.read()
++                if ok and frame is not None:
++                    last = frame
++                    means.append(float(frame.mean()))
++                if time.time() - t0 > 12:
++                    break
++            if last is None:
++                say(f"  {idx}: opens ({info['width']}x{info['height']}) but delivers NO frames")
++                continue
++            tail = means[-5:]
++            grey = bool(abs(last[..., 0].astype(int) - last[..., 1].astype(int)).mean() < 2) if last.ndim == 3 else True
++            tall = last.shape[0] > last.shape[1]
++            mean = sum(tail) / len(tail)
++            verdict = ("BLACK picture" if mean < 8 else "looks like INFRARED (grey, tall): USE THIS ONE" if grey and tall
++                       else "colour camera (the Gaze Tracker uses this)" if not grey else "grey but not tall")
++            say(f"  {idx}: {last.shape[1]}x{last.shape[0]} {info['fourcc']} {len(means)} frames, brightness {mean:.0f}/255, {'grey' if grey else 'colour'}: {verdict}")
++        finally:
++            cap.release()
++    say("Use the number that says 'looks like INFRARED', e.g.  app.py --auto --mic N --ir-device THAT_NUMBER")
++
++
+ def run(a, stop, say=print):
++    if getattr(a, "scan", False):
++        scan(a, say)
++        return
+     coach = CoachClient(min_repeat_s=0.0)
+     if not coach.health():
+         say("WARNING: the Logi plugin does NOT answer on 127.0.0.1:8787, samples are only printed.")
+@@ -141,7 +182,7 @@ def run(a, stop, say=print):
+     for _ in range(20):                      # the first ~20 frames are an auto-exposure ramp
+         cap.read()
+ 
+-    last, t_status, frames, found = 0.0, time.time(), 0, 0
++    last, t_status, frames, found, black_said = 0.0, time.time(), 0, 0, False
+     try:
+         while not stop.is_set():
+             ok, frame = cap.read()
+@@ -154,6 +195,11 @@ def run(a, stop, say=print):
+                 continue
+             last = now
+             gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
++            brightness = float(gray.mean())
++            if brightness < 8 and frames > 10 and not black_said:
++                black_said = True
++                say("WARNING: the picture is BLACK (brightness %.0f/255). Wrong camera number, or the infrared stream is not delivering. "
++                    "Run:  behind_monitor.py --scan   to find the right number." % brightness)
+             boxes = detect(gray, cascade, a.min_face)
+             faces = to_faces(boxes, gray.shape[1])
+             user, tracked = handle(faces, now)
+@@ -169,7 +215,7 @@ def run(a, stop, say=print):
+             if now - t_status >= 5:
+                 t_status = now
+                 say(f"[{now - t0:4.0f}s] faces now: {len(boxes)} ({'you + ' + str(len(tracked)) + ' other' if user and tracked else 'you only' if user else 'nobody'}) "
+-                    f"| frames {frames} | plugin: {coach.sent} ok / {coach.failed} failed"
++                    f"| frames {frames} | brightness {brightness:.0f} | plugin: {coach.sent} ok / {coach.failed} failed"
+                     + (f" | other: x={tracked[0][1].x:.2f} size={tracked[0][1].size:.3f}" if tracked else ""))
+     finally:
+         cap.release()
+diff --git a/docs/CAMERA_FEEDS.md b/docs/CAMERA_FEEDS.md
+index b219095..b04ec1c 100644
+--- a/docs/CAMERA_FEEDS.md
++++ b/docs/CAMERA_FEEDS.md
+@@ -24,6 +24,11 @@ with a stable id, x position and size; the plugin decides (walk past = ignored,
+ - **OpenCV 4 is required** (`opencv-python>=4.8,<5` in `pyproject.toml`): OpenCV 5 removed `CascadeClassifier`. After pulling run `uv sync`.
+ - Frontal faces only: someone seen from the side or from behind (hair only) is not detected.
+ 
++## Black picture / wrong camera
++`behind_monitor.py --scan` tries camera numbers 0-9 and prints size, brightness and grey/colour for each: the infrared camera is **grey, tall (portrait) and not black**. The monitor also
++warns `the picture is BLACK` and shows `brightness` in its status line. A black picture means a wrong number or an infrared stream that does not deliver (try with the Gaze Tracker running,
++unplug and replug the camera, close other programs that use the camera). The camera docs note the first ~20 infrared frames are an auto-exposure ramp.
++
+ ## Verified / not verified
+ - Verified here (no camera): the detector finds a second face in a picture; the simulated visitor and the simulated far-away person reach the real plugin logic and produce
+   one `person_behind` alert (mouse, Keypad, screen) and `ratio` 0.3 / back to 1.
+-- 
+2.43.0
+

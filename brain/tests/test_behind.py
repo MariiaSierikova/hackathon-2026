@@ -48,6 +48,17 @@ def test_face_width_from_the_gaze_tracker_snapshot():
     assert face_width({"face": {"bounding_box_norm": {"width": 0}}}) is None
 
 
+def test_flicker_filter_gives_a_lit_picture_every_time():
+    import numpy as np
+    from brain.monitors.behind_monitor import enhance, merge_flicker  # noqa: PLC0415
+    lit = np.zeros((40, 30), np.uint8)
+    lit[10:30, 8:22] = 90                       # a face-like blob, only visible while the infrared light is on
+    unlit = np.zeros_like(lit)
+    assert merge_flicker(lit, unlit).max() == 90 and merge_flicker(unlit, lit).max() == 90
+    assert enhance(merge_flicker(lit, unlit))[1] > 2 and enhance(unlit)[1] < 2     # one dark frame alone is "black", merged it is not
+    assert merge_flicker(None, lit) is lit and merge_flicker(np.zeros((5, 5), np.uint8), lit) is lit   # different size: start over
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

@@ -1,0 +1,496 @@
+From a98ee294a3ead3f8ac69c0046966bb09617b9cfd Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 09:05:53 +0000
+Subject: [PATCH 1/2] Alert light key is an on/off switch for ALL alerts
+ (policy drops everything while off; the key shows ALERTS ON / OFF)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ .../src/Actions/FeatureToggleCommand.cs       |  9 ++++++--
+ .../src/Policy/NotificationPolicy.cs          | 21 +++++++++++++++++++
+ .../src/Policy/PolicySettings.cs              |  1 +
+ .../tests/Harness/Program.cs                  | 14 +++++++++++++
+ 4 files changed, 43 insertions(+), 2 deletions(-)
+
+diff --git a/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs b/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
+index fc7fbbd..d2568a1 100644
+--- a/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
++++ b/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
+@@ -35,7 +35,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
+ 
+             this.AddParameter("master", "Master switch", Group);
+             this.AddParameter("present", "Presenting mode (silent)", Group);
+-            this.AddParameter("alert", "Alert light (shows alerts, nothing else)", Group);
++            this.AddParameter("alert", "Alert light (alerts on / off, shows alerts)", Group);
+         }
+ 
+         // Every key of this command is a "variation" (a parameter). The Logitech docs say ActionImageChanged() without a
+@@ -61,6 +61,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
+             UiSettings.Changed += this.RedrawAll;
+             PomodoroState.Changed += this.RedrawPomodoro;
+             SessionState.Changed += this.RedrawIfAlert;
++            NotificationPolicy.Changed += this.RedrawAll;
+ 
+             // While an alert is showing, every Desk Coach key flashes the same alert; this timer animates it and puts the icons back afterwards.
+             this._blinker = new System.Timers.Timer(400) { AutoReset = true };
+@@ -74,6 +75,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
+             UiSettings.Changed -= this.RedrawAll;
+             PomodoroState.Changed -= this.RedrawPomodoro;
+             SessionState.Changed -= this.RedrawIfAlert;
++            NotificationPolicy.Changed -= this.RedrawAll;
+             this._blinker?.Stop();
+             this._blinker?.Dispose();
+             return true;
+@@ -119,6 +121,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
+                     UiSettings.TogglePresenting();
+                     break;
+                 case "alert":
++                    NotificationPolicy.SetAlerts(!NotificationPolicy.AlertsOn);
+                     break;
+                 default:
+                     UiSettings.SetFeatureEnabled(actionParameter, !UiSettings.FeatureEnabled(actionParameter));
+@@ -157,7 +160,9 @@ namespace Loupedeck.WorkHealthCoachPlugin
+ 
+                 if (actionParameter == "alert")
+                 {
+-                    return Render.Tile(px, "DESK COACH", "OK", Render.Ok, "no alert");
++                    return NotificationPolicy.AlertsOn
++                        ? Render.Tile(px, "ALERTS", "ON", Render.Ok, "press = off")
++                        : Render.Tile(px, "ALERTS", "OFF", Render.Bad, "press = on");
+                 }
+ 
+                 var on = IsOn(actionParameter);
+diff --git a/plugin/WorkHealthCoachPlugin/src/Policy/NotificationPolicy.cs b/plugin/WorkHealthCoachPlugin/src/Policy/NotificationPolicy.cs
+index 5acec5f..d3a869f 100644
+--- a/plugin/WorkHealthCoachPlugin/src/Policy/NotificationPolicy.cs
++++ b/plugin/WorkHealthCoachPlugin/src/Policy/NotificationPolicy.cs
+@@ -68,6 +68,22 @@ namespace Loupedeck.WorkHealthCoachPlugin
+             Changed?.Invoke();
+         }
+ 
++        // The "Alert light" key: off = nothing is shown, buzzed or played for ANY alert (the features themselves keep running: Pomodoro clock, volume when far ...).
++        public static Boolean AlertsOn => Settings.AlertsOn;
++
++        public static void SetAlerts(Boolean on)
++        {
++            Settings.AlertsOn = on;
++            Settings.Save();
++            if (!on)
++            {
++                SessionState.DismissAlert();   // whatever is showing right now goes away
++            }
++
++            PluginLog.Info($"Alerts switched {(on ? "ON" : "OFF")} (Alert light key)");
++            Changed?.Invoke();
++        }
++
+         public static void CycleStrength()
+         {
+             var i = Array.IndexOf(PolicySettings.Strengths, Settings.HapticStrength);
+@@ -136,6 +152,11 @@ namespace Loupedeck.WorkHealthCoachPlugin
+                 return Drop(m, "master switch off");
+             }
+ 
++            if (!Settings.AlertsOn)
++            {
++                return Drop(m, "alerts switched off (Alert light key)");
++            }
++
+             if (!Settings.Triggers.TryGetValue(m.Trigger, out var rule))
+             {
+                 return Drop(m, "no rule");
+diff --git a/plugin/WorkHealthCoachPlugin/src/Policy/PolicySettings.cs b/plugin/WorkHealthCoachPlugin/src/Policy/PolicySettings.cs
+index 0d3654c..2982e41 100644
+--- a/plugin/WorkHealthCoachPlugin/src/Policy/PolicySettings.cs
++++ b/plugin/WorkHealthCoachPlugin/src/Policy/PolicySettings.cs
+@@ -37,6 +37,7 @@ namespace Loupedeck.WorkHealthCoachPlugin
+         public Int32 TotalMinutes { get; set; } = 20;
+         public Int32 WarnMinutes { get; set; } = 1;
+         public Boolean Master { get; set; } = true;                // master switch: off = nothing reaches the user
++        public Boolean AlertsOn { get; set; } = true;              // the "Alert light" key: off = no alert reaches the user (features keep working)
+         public String Profile { get; set; } = "everyday";          // settings-page profile (everyday | presenting | focus | meeting | custom)
+         public List<String> Muted { get; set; } = new();           // channels silenced by the profile: audio | screen | haptic | keypad
+         public Dictionary<String, TriggerRule> Triggers { get; set; } = new();
+diff --git a/plugin/WorkHealthCoachPlugin/tests/Harness/Program.cs b/plugin/WorkHealthCoachPlugin/tests/Harness/Program.cs
+index 14ac640..04574fc 100644
+--- a/plugin/WorkHealthCoachPlugin/tests/Harness/Program.cs
++++ b/plugin/WorkHealthCoachPlugin/tests/Harness/Program.cs
+@@ -627,6 +627,20 @@ try
+     UiSettings.TogglePresenting();
+     Check("Presenting off: keys are back", Changed(baseline, Snapshot()) == "");
+ 
++    // The Alert light key: off = no alert of any kind reaches the user.
++    NotificationPolicy.SetAlerts(false);
++    Check("Alert light off: ONLY the Alert light key changes", Changed(baseline, Snapshot()) == "alert", $"changed: {Changed(baseline, Snapshot())}");
++    var later1 = DateTime.UtcNow.AddDays(30);
++    Check("alerts off: every kind of alert is dropped", new[] { "person_behind", "speak_up", "break_due", "pace_too_fast", "blink_low", "time_warning" }
++        .All(t => NotificationPolicy.Decide(new TriggerMessage(t, 1.0), later1) == null));
++    Check("alerts off: a forced test trigger still goes through (development switch)", NotificationPolicy.Decide(new TriggerMessage("speak_up", 1.0, true), later1) != null);
++    Check("alerts off survives a restart (settings.json)", PolicySettings.FromJson(NotificationPolicy.Settings.ToJson()).AlertsOn == false);
++    SessionState.OnTrigger(new TriggerMessage("person_behind", 1.0));
++    NotificationPolicy.SetAlerts(false);
++    Check("switching alerts off clears an alert that is showing", !SessionState.TakeoverActive);
++    NotificationPolicy.SetAlerts(true);
++    Check("Alert light on: back to the first picture", Changed(baseline, Snapshot()) == "");
++
+     UiSettings.SetFeatureEnabled("behind", false);
+     var offKeys = new[] { "speed", "volume", "blink", "distance" };
+     foreach (var k in offKeys) { UiSettings.SetFeatureEnabled(k, false); }
+-- 
+2.43.0
+
+
+From aef98308efce46b8e6d5631ecd70ace34eefa8c2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 09:07:47 +0000
+Subject: [PATCH 2/2] app.py --auto: the monitors follow the plugin's switches
+ (Pomodoro on -> gaze tracking + timer chip start by themselves); docs
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ brain/src/brain/app.py         |  45 ++++++++++---
+ brain/src/brain/supervisor.py  |  94 +++++++++++++++++++++++++++
+ brain/tests/test_supervisor.py | 112 +++++++++++++++++++++++++++++++++
+ docs/AUTO.md                   |  24 +++++++
+ 4 files changed, 268 insertions(+), 7 deletions(-)
+ create mode 100644 brain/src/brain/supervisor.py
+ create mode 100644 brain/tests/test_supervisor.py
+ create mode 100644 docs/AUTO.md
+
+diff --git a/brain/src/brain/app.py b/brain/src/brain/app.py
+index 1e84af1..df9788a 100644
+--- a/brain/src/brain/app.py
++++ b/brain/src/brain/app.py
+@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "brain" / "vendor" / "logiinsight"))
+ sys.path.insert(0, str(ROOT / "overlay"))
+ 
+ from brain.monitors import behind_monitor, blink_monitor, pace_monitor, pomodoro_monitor  # noqa: E402
++from brain.supervisor import Supervisor, read_switches  # noqa: E402
+ 
+ 
+ def list_devices():
+@@ -50,6 +51,7 @@ def main():
+     ap.add_argument("--no-overlay", action="store_true", help="do not show the on-screen owl/snail")
+     blink_monitor.add_args(ap)
+     ap.add_argument("--pomodoro", action="store_true", help="Pomodoro: send desk presence from the Gaze Tracker app to the plugin (the plugin owns the clock) and show the status chip")
++    ap.add_argument("--auto", action="store_true", help="start/stop the gaze tracking (+ timer chip), --mic and --ir-device monitors by themselves, following the Keypad keys / settings page (docs/AUTO.md)")
+     pomodoro_monitor.add_args(ap)
+     ap.add_argument("--behind", action="store_true", help="look for a second person behind you with the camera's infrared stream (see --ir-device)")
+     behind_monitor.add_args(ap)
+@@ -70,6 +72,8 @@ def main():
+         pace_monitor.run(a, threading.Event(), print)
+         return
+ 
++    if a.auto:
++        a.no_blink = a.no_blink or a.device is None      # blink is not managed (camera AI overheats); only with an explicit --device
+     if not a.simulate and not a.no_blink and a.device is None:
+         sys.exit("Which camera? Run with --list to see the numbers, then add --device N (or use --no-blink to skip the camera, "
+                  "or --simulate to test without hardware).")
+@@ -86,12 +90,39 @@ def main():
+     threads = []
+     if not a.no_blink:
+         threads.append(threading.Thread(target=blink_monitor.run, args=(a, stop, say_for("blink")), name="blink", daemon=True))
+-    if not a.no_pace:
+-        threads.append(threading.Thread(target=pace_monitor.run, args=(a, stop, say_for("pace")), name="pace", daemon=True))
+-    if a.pomodoro:
+-        threads.append(threading.Thread(target=pomodoro_monitor.run, args=(a, stop, say_for("pomo")), name="pomo", daemon=True))
+-    if a.behind:
+-        threads.append(threading.Thread(target=behind_monitor.run, args=(a, stop, say_for("behind")), name="behind", daemon=True))
++    if a.auto:
++        # the monitors follow the plugin's switches: started and stopped by the supervisor
++        runs = {"gaze": (pomodoro_monitor.run, "gaze"), "pace": (pace_monitor.run, "pace"), "behind": (behind_monitor.run, "behind")}
++        running = {}
++
++        def start_monitor(name):
++            fn, tag = runs[name]
++            ev = threading.Event()
++            t = threading.Thread(target=fn, args=(a, ev, say_for(tag)), name=name, daemon=True)
++            running[name] = (t, ev)
++            t.start()
++
++        def stop_monitor(name):
++            t, ev = running.pop(name, (None, None))
++            if ev is not None:
++                ev.set()
++                t.join(timeout=5)
++
++        available = {"gaze"} | ({"pace"} if (a.mic is not None or a.simulate) else set()) | ({"behind"} if (a.ir_device is not None or a.simulate) else set())
++        from brain.bridge.client import CoachClient
++        sup = Supervisor(lambda c=CoachClient(): read_switches(c), start_monitor, stop_monitor,
++                         lambda n: n in running and running[n][0].is_alive(), available, say=say_for("auto"))
++        say_for("auto")(f"watching the plugin's switches; can start: {', '.join(sorted(available))}"
++                        + ("" if "pace" in available else "   (add --mic N to let Speech speed / volume follow the switches)")
++                        + ("" if "behind" in available else "   (add --ir-device N for Person behind)"))
++        threads.append(threading.Thread(target=sup.loop, args=(stop,), name="auto", daemon=True))
++    else:
++        if not a.no_pace:
++            threads.append(threading.Thread(target=pace_monitor.run, args=(a, stop, say_for("pace")), name="pace", daemon=True))
++        if a.pomodoro:
++            threads.append(threading.Thread(target=pomodoro_monitor.run, args=(a, stop, say_for("pomo")), name="pomo", daemon=True))
++        if a.behind:
++            threads.append(threading.Thread(target=behind_monitor.run, args=(a, stop, say_for("behind")), name="behind", daemon=True))
+     if not threads:
+         sys.exit("Nothing to run: you disabled both blink and pace.")
+ 
+@@ -114,7 +145,7 @@ def main():
+     from PySide6 import QtCore
+ 
+     app, _ov = overlay_module.start()
+-    if a.pomodoro:
++    if a.pomodoro or a.auto:
+         import pomodoro_chip
+         chip = pomodoro_chip.Chip(pomodoro_monitor.get_status)   # keep the reference, or Qt deletes it  # noqa: F841
+     say_for("app")("Overlay window ready (invisible until the owl or the snail is needed). Ctrl+C stops everything.")
+diff --git a/brain/src/brain/supervisor.py b/brain/src/brain/supervisor.py
+new file mode 100644
+index 0000000..9c2bfc4
+--- /dev/null
++++ b/brain/src/brain/supervisor.py
+@@ -0,0 +1,94 @@
++"""Starts and stops the camera / microphone monitors so they FOLLOW the plugin's switches (Keypad keys or settings page).
++
++Run it once (`app.py --auto`, see docs/AUTO.md): when you switch Pomodoro on, the gaze tracking (desk presence, pause / resume) and the on-screen timer
++start by themselves; switch it off and they stop. Same idea for the others:
++
++  switch                                  monitor that runs
++  Pomodoro on  or  Volume when far on     "gaze"   (Gaze Tracker -> presence, face size; the timer chip shows the plugin's clock)
++  Speech speed or Speech volume on        "pace"   (microphone)             only when you gave --mic
++  Person behind on                        "behind" (infrared camera)        only when you gave --ir-device
++  master switch off                       nothing runs
++Eye blinking is NOT managed: the camera's AI overheats after ~10 minutes, so it stays a manual `--device N` start.
++"""
++import time
++
++DEFAULT_ON = {"speed": True, "volume": True, "blink": True, "distance": True, "behind": True, "pomodoro": False}
++
++
++def read_switches(coach):
++    """The plugin's switches as {'master': bool, 'features': {id: bool}}, or None when the plugin does not answer (then nothing changes)."""
++    pom = coach.get_json("/pomodoro", timeout_s=0.8)
++    if pom is None:
++        return None
++    ui = coach.get_json("/ui-state", timeout_s=0.8)
++    ui = ui if isinstance(ui, dict) else {}
++    feats = {}
++    for fid, default in DEFAULT_ON.items():
++        node = ((ui.get("features") or {}).get(fid) or {}).get("enabled")
++        feats[fid] = node if isinstance(node, bool) else default
++    feats["pomodoro"] = bool(pom.get("active"))                 # the plugin's own clock is the truth for Pomodoro (Keypad key or page)
++    master = ui.get("master")
++    return {"master": master if isinstance(master, bool) else True, "features": feats}
++
++
++def wanted(sw, available):
++    """Names of the monitors that should run for these switches."""
++    if not sw["master"]:
++        return set()
++    f = sw["features"]
++    want = set()
++    if f["pomodoro"] or f["distance"]:
++        want.add("gaze")
++    if (f["speed"] or f["volume"]) and "pace" in available:
++        want.add("pace")
++    if f["behind"] and "behind" in available:
++        want.add("behind")
++    return want
++
++
++class Supervisor:
++    def __init__(self, read, start, stop, is_alive, available, say=print, retry_s=15.0, clock=time.monotonic):
++        self.read, self._start, self._stop, self.is_alive = read, start, stop, is_alive
++        self.available, self.say, self.retry_s, self.clock = set(available), say, retry_s, clock
++        self._started = set()
++        self._died_at = {}
++
++    def step(self):
++        sw = self.read()
++        if sw is None:                       # plugin not answering (restarting?): change nothing
++            return
++        want = wanted(sw, self.available)
++        now = self.clock()
++        for name in sorted(want):
++            if self.is_alive(name):
++                self._died_at.pop(name, None)
++                continue
++            died = self._died_at.get(name)
++            if name in self._started and died is None:           # it ended by itself (error, camera gone ...)
++                self._died_at[name] = now
++                self.say(f"the {name} monitor stopped by itself; trying again in {self.retry_s:.0f} s")
++                continue
++            if died is not None and now - died < self.retry_s:
++                continue
++            self._died_at.pop(name, None)
++            self._started.add(name)
++            self.say(f"switches say '{name}' is needed -> starting it")
++            self._start(name)
++        for name in sorted(self._started - want):
++            self.say(f"'{name}' is not needed any more -> stopping it")
++            self._stop(name)
++            self._started.discard(name)
++            self._died_at.pop(name, None)
++
++    def stop_all(self):
++        for name in sorted(self._started):
++            self._stop(name)
++        self._started.clear()
++
++    def loop(self, stop_event, every_s=2.0):
++        try:
++            self.step()
++            while not stop_event.wait(every_s):
++                self.step()
++        finally:
++            self.stop_all()
+diff --git a/brain/tests/test_supervisor.py b/brain/tests/test_supervisor.py
+new file mode 100644
+index 0000000..e52b42f
+--- /dev/null
++++ b/brain/tests/test_supervisor.py
+@@ -0,0 +1,112 @@
++"""Run: cd brain && uv run python tests/test_supervisor.py"""
++import sys
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
++from brain.supervisor import DEFAULT_ON, Supervisor, read_switches, wanted  # noqa: E402
++
++
++def sw(master=True, **features):
++    f = dict(DEFAULT_ON)
++    f.update(features)
++    return {"master": master, "features": f}
++
++
++class Rig:
++    def __init__(self, available=("gaze", "pace", "behind")):
++        self.state, self.alive, self.log, self.now = sw(), set(), [], 0.0
++        self.sup = Supervisor(lambda: self.state, self.start, self.stop, lambda n: n in self.alive, available, say=lambda m: None,
++                              retry_s=15.0, clock=lambda: self.now)
++
++    def start(self, n):
++        self.alive.add(n)
++        self.log.append("start " + n)
++
++    def stop(self, n):
++        self.alive.discard(n)
++        self.log.append("stop " + n)
++
++
++def test_wanted():
++    A = {"gaze", "pace", "behind"}
++    assert wanted(sw(distance=False, speed=False, volume=False, behind=False), A) == set()
++    assert wanted(sw(distance=False, speed=False, volume=False, behind=False, pomodoro=True), A) == {"gaze"}
++    assert wanted(sw(), A) == {"gaze", "pace", "behind"}                     # defaults: everything but Pomodoro
++    assert wanted(sw(), {"gaze"}) == {"gaze"}                                # no --mic / --ir-device given: only the gaze monitor can run
++    assert wanted(sw(master=False, pomodoro=True), A) == set()               # master off: nothing runs
++
++
++def test_pomodoro_on_starts_gaze_and_off_stops_it():
++    r = Rig()
++    r.state = sw(distance=False, speed=False, volume=False, behind=False)
++    r.sup.step()
++    assert r.log == []
++    r.state = sw(distance=False, speed=False, volume=False, behind=False, pomodoro=True)     # the Keypad key is pressed
++    r.sup.step()
++    r.sup.step()
++    assert r.log == ["start gaze"]                                                            # started once, not on every poll
++    r.state = sw(distance=False, speed=False, volume=False, behind=False)
++    r.sup.step()
++    assert r.log == ["start gaze", "stop gaze"] and not r.alive
++
++
++def test_plugin_not_answering_changes_nothing():
++    r = Rig()
++    r.state = sw(pomodoro=True)
++    r.sup.step()
++    before = list(r.log)
++    r.state = None
++    r.sup.step()
++    assert r.log == before and r.alive == {"gaze", "pace", "behind"}
++
++
++def test_a_monitor_that_dies_is_restarted_after_the_wait_not_in_a_loop():
++    r = Rig(available=("gaze",))
++    r.state = sw(distance=False, speed=False, volume=False, behind=False, pomodoro=True)
++    r.sup.step()
++    r.alive.clear()                                                           # it crashed
++    r.now = 1.0
++    r.sup.step()
++    assert r.log == ["start gaze"]                                            # noticed, waiting
++    r.now = 10.0
++    r.sup.step()
++    assert r.log == ["start gaze"]
++    r.now = 17.0
++    r.sup.step()
++    assert r.log == ["start gaze", "start gaze"]
++
++
++def test_master_off_stops_everything_and_stop_all():
++    r = Rig()
++    r.sup.step()
++    assert r.alive == {"gaze", "pace", "behind"}
++    r.state = sw(master=False)
++    r.sup.step()
++    assert not r.alive
++    r.state = sw()
++    r.sup.step()
++    r.sup.stop_all()
++    assert not r.alive
++
++
++class FakeCoach:
++    def __init__(self, answers):
++        self.answers = answers
++
++    def get_json(self, path, timeout_s=0.4):
++        return self.answers.get(path)
++
++
++def test_read_switches():
++    assert read_switches(FakeCoach({})) is None
++    s = read_switches(FakeCoach({"/pomodoro": {"active": True}, "/ui-state": {"master": True, "features": {"speed": {"enabled": False}, "pomodoro": {"enabled": False}}}}))
++    assert s["features"]["pomodoro"] is True and s["features"]["speed"] is False and s["features"]["volume"] is True and s["master"] is True
++    s = read_switches(FakeCoach({"/pomodoro": {"active": False}}))                    # page never opened: no ui-state
++    assert s["features"]["pomodoro"] is False and s["features"]["distance"] is True
++
++
++if __name__ == "__main__":
++    for n, f in list(globals().items()):
++        if n.startswith("test_"):
++            f()
++            print("ok", n)
+diff --git a/docs/AUTO.md b/docs/AUTO.md
+new file mode 100644
+index 0000000..4376cdc
+--- /dev/null
++++ b/docs/AUTO.md
+@@ -0,0 +1,24 @@
++# One start, then the Keypad decides (`app.py --auto`)
++
++Start the launcher once; it WATCHES the plugin's switches (Keypad keys or settings page, polled every 2 s) and starts / stops the monitors itself:
++
++| Switch | What runs | Needs |
++|---|---|---|
++| Pomodoro on **or** Volume when far on | gaze monitor (Gaze Tracker -> desk presence, pause / resume, face size) and the on-screen timer chip (it shows only while the Pomodoro is on) | Gaze Tracker app running + calibrated |
++| Speech speed **or** Speech volume on | microphone monitor (snail, duck) | `--mic N` |
++| Person behind on | infrared-camera monitor | `--ir-device N` |
++| Master switch off | nothing | |
++| Eye blinking | **not managed**: the camera's AI overheats after ~10 min, so blink stays a manual `app.py --device N` start | |
++
++```
++cd brain
++uv run python src/brain/app.py --auto --mic 11 --ir-device 2
++```
++(`--list` shows the numbers; leave `--mic` / `--ir-device` out and those features simply are not started.) Press the Pomodoro key on the Keypad: the timer chip appears, presence flows, the
++clock pauses when you leave. Press it again: the gaze monitor stops. A monitor that crashes is retried after 15 s. If the plugin does not answer (Options+ restarting), nothing is changed.
++Ctrl+C stops everything. Tests: `brain/tests/test_supervisor.py`.
++
++# The Alert light key
++The ninth Desk Coach key is a switch for ALL alerts: **ALERTS ON** (green) / **ALERTS OFF** (red). Off = the policy drops every alert (mouse, Keypad, screen, sound), also person behind and time
++warnings; the features keep running (Pomodoro clock, volume when far). Stored in `settings.json` (`alertsOn`), so it survives a restart. Only forced test triggers (`--force`) still show.
++While an alert is showing, any key press dismisses it (it does not toggle), so to switch alerts off during an alert press twice.
+-- 
+2.43.0
+

@@ -1,0 +1,193 @@
+From 258cea648319e5097ebc70398697ad0761743462 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 09:23:17 +0000
+Subject: [PATCH] Gaze focus: unreliable (fallback) frames count as unknown,
+ 15% margin, --no-focus, gaze values in the log
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ brain/src/brain/monitors/pomodoro_monitor.py | 51 +++++++++++++++-----
+ brain/src/brain/vision/pomodoro.py           |  5 +-
+ brain/tests/test_pomodoro.py                 | 23 +++++++++
+ docs/POMODORO.md                             |  7 +++
+ 4 files changed, 71 insertions(+), 15 deletions(-)
+
+diff --git a/brain/src/brain/monitors/pomodoro_monitor.py b/brain/src/brain/monitors/pomodoro_monitor.py
+index 6efc61a..079d280 100644
+--- a/brain/src/brain/monitors/pomodoro_monitor.py
++++ b/brain/src/brain/monitors/pomodoro_monitor.py
+@@ -79,19 +79,40 @@ def face_width(snap):
+     return float(w) if isinstance(w, (int, float)) and w > 0 else None
+ 
+ 
+-def observe(snap, margin=0.05):
+-    """Snapshot -> (present, focused). gaze is null when there is no face OR no calibration, so presence also uses `face`."""
++def gaze_is_reliable(snap):
++    """False for the Gaze Tracker's own 'fallback' frames (poor estimate, can show coordinates far off the screen: x = -321 ...)."""
++    gaze = (snap or {}).get("gaze") or {}
++    if gaze.get("source") == "calibrated_legacy_fallback":
++        return False
++    return not ((snap or {}).get("geometry") or {}).get("rejection_reason")
++
++
++def observe(snap, margin=0.15):
++    """Snapshot -> (present, focused). gaze is null when there is no face OR no calibration, so presence also uses `face`.
++    focused is True (gaze on the screen, `margin` of its size beyond the edge still counts), False (gaze off the screen) or None (no reliable
++    gaze: the tracker's fallback frame; says nothing about where you look)."""
+     if not snap:
+         return False, False
+     gaze, face = snap.get("gaze"), snap.get("face")
+     present = bool(gaze) or bool(face and face.get("bounding_box_norm"))
+-    focused = False
+-    if gaze:
+-        scr = snap.get("screen") or {}
+-        w, h = scr.get("width_px") or 0, scr.get("height_px") or 0
+-        if w and h:
+-            focused = (-margin * w <= gaze["x_px"] <= (1 + margin) * w) and (-margin * h <= gaze["y_px"] <= (1 + margin) * h)
+-    return present, focused
++    if not gaze:
++        return present, False
++    if not gaze_is_reliable(snap):
++        return present, None
++    scr = snap.get("screen") or {}
++    w, h = scr.get("width_px") or 0, scr.get("height_px") or 0
++    if not (w and h):
++        return present, False
++    return present, (-margin * w <= gaze["x_px"] <= (1 + margin) * w) and (-margin * h <= gaze["y_px"] <= (1 + margin) * h)
++
++
++def gaze_text(focused, snap=None):
++    """For the log: on screen / off screen / unreliable, with the real numbers when we have them."""
++    word = "unreliable" if focused is None else "on screen" if focused else "off screen"
++    g = (snap or {}).get("gaze")
++    if g:
++        word += f" ({g.get('x_px', 0):.0f},{g.get('y_px', 0):.0f} {str(g.get('source', '?'))[:4]})"
++    return word
+ 
+ 
+ class FakeGaze:
+@@ -125,6 +146,8 @@ def add_args(ap):
+     ap.add_argument("--gaze-url", default="ws://127.0.0.1:8964")
+     ap.add_argument("--remind-every", type=float, default=2.0, help="seconds between break_due messages while a break is due (--own-timer only)")
+     ap.add_argument("--status-every", type=float, default=10.0, help="seconds between status lines (use 2 while testing)")
++    ap.add_argument("--focus-margin", type=float, default=0.15, help="a gaze point this fraction of the screen size beyond the edge still counts as looking at the screen")
++    ap.add_argument("--no-focus", action="store_true", help="ignore the gaze: only a missing FACE counts as away (use it if the gaze estimate is unreliable)")
+     ap.add_argument("--no-distance", action="store_true", help="do not send the face size to the plugin's 'Volume when far' feature")
+     ap.add_argument("--far-after", type=float, default=3.0, help="seconds without a face before 'out of the picture' counts as far away (the plugin then waits its own 'Act after')")
+     ap.add_argument("--calibrate-distance", action="store_true", help="sit at your NORMAL distance: measures your face size for 4 s and tells the plugin 'this is my normal distance', then exit")
+@@ -171,7 +194,9 @@ def run(a, stop, say=print):
+                 continue
+             warned = False
+             snap = feed.latest if now - feed.latest_at < 3.0 else None      # stale data = nobody seen
+-            present, focused = observe(snap)
++            present, focused = observe(snap, getattr(a, "focus_margin", 0.15))
++            if getattr(a, "no_focus", False) and present:
++                focused = True
+             state = tracker.update(now, present, focused)
+             if own:
+                 STATUS["state"], STATUS["remaining"] = state, tracker.remaining_s()
+@@ -232,10 +257,10 @@ def run(a, stop, say=print):
+             if state != last_state:
+                 if own:
+                     say(f"[{now - t0:5.0f}s] {state.upper()}  (worked {tracker.worked:.0f}s, "
+-                        f"{'face' if present else 'no face'}, {'on screen' if focused else 'off screen'})")
++                        f"{'face' if present else 'no face'}, gaze {gaze_text(focused, snap)})")
+                 else:
+                     say(f"[{now - t0:5.0f}s] {'AT THE DESK' if state != PAUSED else 'AWAY (not here / not looking)'} "
+-                        f"({'face' if present else 'no face'}, {'on screen' if focused else 'off screen'}) -> plugin")
++                        f"({'face' if present else 'no face'}, gaze {gaze_text(focused, snap)}) -> plugin")
+                 last_state = state
+             if own and state == DUE and now - last_remind >= a.remind_every:
+                 last_remind = now
+@@ -251,7 +276,7 @@ def run(a, stop, say=print):
+                 clock = (f"plugin clock: {STATUS['state']} {left // 60:02d}:{left % 60:02d}{raw}" if STATUS["state"]
+                          else "plugin clock: not running (Pomodoro off, or the plugin does not answer)")
+                 say(f"[{now - t0:5.0f}s] {'at desk' if state != PAUSED else 'AWAY'} | face {'yes' if present else 'NO'} | "
+-                    f"gaze {'on screen' if focused else 'off screen'} | {clock}")
++                    f"gaze {gaze_text(focused, snap)} | {clock}")
+             if own and now - last_status >= 10 and state != DUE:
+                 last_status = now
+                 say(f"[{now - t0:5.0f}s] {state}: {tracker.remaining_s() / 60:.1f} min of work left"
+diff --git a/brain/src/brain/vision/pomodoro.py b/brain/src/brain/vision/pomodoro.py
+index 1d37c2a..b7f0312 100644
+--- a/brain/src/brain/vision/pomodoro.py
++++ b/brain/src/brain/vision/pomodoro.py
+@@ -31,7 +31,7 @@ class PomodoroTracker:
+         self.break_taken = False     # True for one update() after a due break was actually taken
+ 
+     def update(self, now, present, focused):
+-        """present: a face is seen. focused: eyes on the screen (only meaningful if present). Returns the state."""
++        """present: a face is seen. focused: eyes on the screen (True / False; None = unknown, e.g. an unreliable gaze frame). Returns the state."""
+         dt = 0.0 if self._last is None else max(0.0, min(now - self._last, 5.0))   # cap: a stalled loop must not jump the clock
+         self._last = now
+         self.break_taken = False
+@@ -41,7 +41,8 @@ class PomodoroTracker:
+             self._unfocused = 0.0
+         else:
+             self._absent = 0.0
+-            self._unfocused = 0.0 if focused else self._unfocused + dt
++            if focused is not None:                 # None = no reliable gaze this time: says nothing, the counter stays
++                self._unfocused = 0.0 if focused else self._unfocused + dt
+ 
+         away = self._absent if not present else 0.0
+         # a real break: away long enough -> restart
+diff --git a/brain/tests/test_pomodoro.py b/brain/tests/test_pomodoro.py
+index 4674f20..94fde00 100644
+--- a/brain/tests/test_pomodoro.py
++++ b/brain/tests/test_pomodoro.py
+@@ -3,6 +3,7 @@ import sys
+ from pathlib import Path
+ 
+ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
++sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "vendor" / "logiinsight"))
+ from brain.vision.pomodoro import DUE, PAUSED, WORK, PomodoroConfig, PomodoroTracker  # noqa: E402
+ 
+ CFG = PomodoroConfig(work_s=100, absent_pause_s=10, lookaway_pause_s=20, reset_s=60)
+@@ -65,6 +66,28 @@ def test_break_taken_flag_fires_once():
+     assert seen.count(True) == 1
+ 
+ 
++def test_unreliable_gaze_frames_do_not_pause():
++    tr = PomodoroTracker(CFG)
++    run(tr, 10)
++    assert run(tr, 60, focused=None) == WORK                            # no information is not "looking away"
++    run(tr, 15, focused=False)
++    run(tr, 3, focused=None)
++    assert tr._unfocused >= 15                                          # unknown frames neither reset nor add
++    assert run(tr, 1, focused=True) == WORK and tr._unfocused == 0
++
++
++def test_observe_reliability_margin_and_fallback():
++    from brain.monitors.pomodoro_monitor import observe  # noqa: PLC0415
++    scr = {"width_px": 1000, "height_px": 500}
++    good = lambda x, y, src="geometric": {"screen": scr, "gaze": {"x_px": x, "y_px": y, "source": src}, "face": {"bounding_box_norm": {"width": .2}}}
++    assert observe(good(500, 250)) == (True, True)
++    assert observe(good(1100, 250)) == (True, True)                     # 10 % beyond the edge: still the screen (margin 15 %)
++    assert observe(good(1300, 250)) == (True, False)
++    assert observe(good(-321, 1300, "calibrated_legacy_fallback")) == (True, None)   # junk frame: unknown, not "away"
++    assert observe({"screen": scr, "gaze": {"x_px": 5, "y_px": 5, "source": "geometric"}, "geometry": {"rejection_reason": "binocular_disagreement"}}) == (True, None)
++    assert observe({"screen": scr, "gaze": None, "face": None}) == (False, False)
++
++
+ def test_stalled_loop_does_not_jump_clock():
+     tr = PomodoroTracker(CFG)
+     tr.update(0.0, True, True)
+diff --git a/docs/POMODORO.md b/docs/POMODORO.md
+index 934e3d3..821e408 100644
+--- a/docs/POMODORO.md
++++ b/docs/POMODORO.md
+@@ -45,3 +45,10 @@ Only use it with the plugin's Pomodoro **switched off** in the plugin, otherwise
+ - The new presence-only path on the real Windows machine (plugin clock + real Gaze Tracker): only run in simulation so far.
+ - The Gaze Tracker next to the LogiInsight camera AI running at the same time.
+ - Thresholds (30 s / 60 s) were chosen from one look-away test.
++
++## Gaze is unreliable or drifts ("face yes | gaze off screen" for a minute while you sit there)
++- The status line shows the real gaze: `gaze off screen (2495,14 geom)`. Frames from the Gaze Tracker's `calibrated_legacy_fallback` model (junk coordinates, e.g. x = -321) now count as
++  *unknown*, not as "looking away"; a gaze point up to 15 % beyond the screen edge still counts as the screen (`--focus-margin`).
++- If the gaze is still off the screen while you look at it: quit ALL Gaze Tracker processes (`taskkill /F /IM "Gaze Tracker.exe"`), start it once, and recalibrate from your normal seat
++  (Controls -> Add points). Calibration is tied to where you sit.
++- Escape hatch: `--no-focus` ignores the gaze completely (only a missing face counts as away).
+-- 
+2.43.0
+

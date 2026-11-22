@@ -1,0 +1,272 @@
+From cdc1307f9ba49c2e4843c41105d65cf24b564820 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 07:23:59 +0000
+Subject: [PATCH] Alerts on the Desk Coach widget keys: every widget key
+ flashes the alert (no Coach screen folder needed), a press dismisses it, new
+ Alert light key
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PrXqEiSjFAi9YGXKJ2Szsg
+---
+ docs/SETTINGS_UI.md                           |  3 +
+ .../src/Actions/FeatureToggleCommand.cs       | 45 ++++++++++-
+ .../src/Ui/KeypadScreen.cs                    | 79 +++++++++++++++++++
+ .../tests/Harness/Program.cs                  | 28 ++++++-
+ 4 files changed, 153 insertions(+), 2 deletions(-)
+
+diff --git a/docs/SETTINGS_UI.md b/docs/SETTINGS_UI.md
+index 3418807..7c4d336 100644
+--- a/docs/SETTINGS_UI.md
++++ b/docs/SETTINGS_UI.md
+@@ -33,6 +33,9 @@ The page offers four patterns per feature. Events and waveforms (`package/events
+ - Keys change the same document as the page, so page, keys and policy stay in sync (the page polls every 2 s).
+   Each key is redrawn **by name** (`ActionImageChanged(key)`: the Logitech docs say the no-argument call is for actions without parameters), so a press or a page switch changes only that key. The Pomodoro key alone is redrawn every second for the countdown. Master off greys every feature key on purpose (everything is paused); Presenting greys the features that profile switches off.
+   Debugging: every key press (`Desk Coach key pressed: 'speed'`) and every image request (`Desk Coach key image: 'speed' ON 80px`, verbose) is in the plugin log.
++- **Alerts on the widget keys (no Coach screen folder needed):** while an alert is active (person behind, break time, speak up, blink, slow down, time), EVERY "Desk Coach" key
++  (the feature toggles and the new **Alert light** action) flashes the same alert and goes back to its icon afterwards. A key press during an alert dismisses it (it does not
++  flip the feature). The keys do not know where they sit, so each draws the whole short message instead of one tile of a 3x3 picture. The Coach screen folder still shows the big picture.
+ - **New reminders** take over the whole Keypad like the eye and snail do: SPEAK UP, LOWER VOICE, BREAK TIME (green), BACK TO FOCUS, VOLUME UP. Colour comes from the page's Keypad colour (image upload is stored but not drawn yet).
+ - **Pomodoro timer** in the Coach screen folder (same layout as the idle screen): top = FOCUS 1 OF 4 + AT DESK / AWAY / PAUSED / REST, middle = huge MM:SS, bottom = reset / play-pause / skip. Limit from the handoff: a folder cannot be opened by code, so the user presses the Coach screen key once; the Pomodoro feature key shows the countdown without opening anything.
+ 
+diff --git a/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs b/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
+index de1f245..54a7fbd 100644
+--- a/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
++++ b/plugin/WorkHealthCoachPlugin/src/Actions/FeatureToggleCommand.cs
+@@ -30,16 +30,26 @@ namespace Loupedeck.WorkHealthCoachPlugin
+ 
+             this.AddParameter("master", "Master switch", Group);
+             this.AddParameter("present", "Presenting mode (silent)", Group);
++            this.AddParameter("alert", "Alert light (shows alerts, nothing else)", Group);
+         }
+ 
+         // Every key of this command is a "variation" (a parameter). The Logitech docs say ActionImageChanged() without a
+         // parameter is for actions that have none; with parameters, say WHICH variation changed.
+-        public static readonly String[] AllKeys = { "speed", "volume", "blink", "pomodoro", "distance", "behind", "master", "present" };
++        public static readonly String[] AllKeys = { "speed", "volume", "blink", "pomodoro", "distance", "behind", "master", "present", "alert" };
++
++        private System.Timers.Timer _blinker;
++        private Boolean _wasAlert;
+ 
+         protected override Boolean OnLoad()
+         {
+             UiSettings.Changed += this.RedrawAll;
+             PomodoroState.Changed += this.RedrawPomodoro;
++            SessionState.Changed += this.RedrawIfAlert;
++
++            // While an alert is showing, every Desk Coach key flashes the same alert; this timer animates it and puts the icons back afterwards.
++            this._blinker = new System.Timers.Timer(400) { AutoReset = true };
++            this._blinker.Elapsed += (_, _) => this.RedrawIfAlert();
++            this._blinker.Start();
+             return true;
+         }
+ 
+@@ -47,9 +57,20 @@ namespace Loupedeck.WorkHealthCoachPlugin
+         {
+             UiSettings.Changed -= this.RedrawAll;
+             PomodoroState.Changed -= this.RedrawPomodoro;
++            SessionState.Changed -= this.RedrawIfAlert;
++            this._blinker?.Stop();
++            this._blinker?.Dispose();
+             return true;
+         }
+ 
++        private void RedrawIfAlert()
++        {
++            if (SessionState.TakeoverActive || this._wasAlert)
++            {
++                this.RedrawAll();
++            }
++        }
++
+         // A switch changed (page, key, profile, master): every key may look different, so refresh each one by name.
+         private void RedrawAll()
+         {
+@@ -65,6 +86,14 @@ namespace Loupedeck.WorkHealthCoachPlugin
+         protected override void RunCommand(String actionParameter)
+         {
+             PluginLog.Info($"Desk Coach key pressed: '{actionParameter}'");
++
++            // While an alert is showing on the keys, a press dismisses it (it must not flip a feature by accident).
++            if (SessionState.TakeoverActive)
++            {
++                SessionState.DismissAlert();
++                return;
++            }
++
+             switch (actionParameter)
+             {
+                 case "master":
+@@ -73,6 +102,8 @@ namespace Loupedeck.WorkHealthCoachPlugin
+                 case "present":
+                     UiSettings.TogglePresenting();
+                     break;
++                case "alert":
++                    break;
+                 default:
+                     UiSettings.SetFeatureEnabled(actionParameter, !UiSettings.FeatureEnabled(actionParameter));
+                     break;
+@@ -100,6 +131,18 @@ namespace Loupedeck.WorkHealthCoachPlugin
+                 }
+ 
+                 var px = Render.Px(imageSize);
++                var alertImage = KeypadScreen.AlertKey(px);
++                this._wasAlert = alertImage != null;
++                if (alertImage != null)
++                {
++                    return alertImage;
++                }
++
++                if (actionParameter == "alert")
++                {
++                    return Render.Tile(px, "DESK COACH", "OK", Render.Ok, "no alert");
++                }
++
+                 var on = IsOn(actionParameter);
+                 PluginLog.Verbose($"Desk Coach key image: '{actionParameter}' {(on ? "ON" : "off")} {px}px");
+                 var icon = PluginResources.ReadImage($"feat_{actionParameter}{(on ? String.Empty : "_off")}.png");
+diff --git a/plugin/WorkHealthCoachPlugin/src/Ui/KeypadScreen.cs b/plugin/WorkHealthCoachPlugin/src/Ui/KeypadScreen.cs
+index d541fab..aa242ef 100644
+--- a/plugin/WorkHealthCoachPlugin/src/Ui/KeypadScreen.cs
++++ b/plugin/WorkHealthCoachPlugin/src/Ui/KeypadScreen.cs
+@@ -76,6 +76,85 @@ namespace Loupedeck.WorkHealthCoachPlugin
+             return Idle();
+         }
+ 
++        // ------------------------------------------------------------ one key of the alert
++        // The Desk Coach widget keys (feature toggles, or the Alert light) do not know where they sit on the Keypad, so while an alert
++        // is active EVERY one of them draws the same small, readable alert. Returns null when no alert is active.
++        public static BitmapImage AlertKey(Int32 px)
++        {
++            if (!SessionState.TakeoverActive)
++            {
++                return null;
++            }
++
++            const Int32 canvas = 116;
++            var flash = (DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond / 400 % 2) == 0;
++            PixelScene s;
++            if (SessionState.BehindActive)
++            {
++                s = new PixelScene(flash ? new BitmapColor(190, 40, 40) : new BitmapColor(120, 24, 24), canvas);
++                Lines(s, new[] { "SOMEONE", "BEHIND", "YOU" }, White);
++            }
++            else if (SessionState.TimeAlertActive)
++            {
++                s = new PixelScene(flash ? new BitmapColor(170, 40, 40) : new BitmapColor(110, 24, 24), canvas);
++                Lines(s, new[] { "TIME", Render.Mmss(SessionState.Remaining < TimeSpan.Zero ? TimeSpan.Zero : SessionState.Remaining), "LEFT" }, White);
++            }
++            else if (SessionState.GenericActive)
++            {
++                var (r, g, b) = SessionState.GenericColor;
++                s = new PixelScene(flash ? new BitmapColor(r, g, b) : new BitmapColor((Int32)(r * 0.65), (Int32)(g * 0.65), (Int32)(b * 0.65)), canvas);
++                Lines(s, SessionState.GenericLines, White);
++            }
++            else if (SessionState.EyeAlertActive)
++            {
++                s = new PixelScene(Cream, canvas);
++                var ms = (Int32)((DateTime.UtcNow - SessionState.EyeAlertStart).TotalMilliseconds % 1800);
++                var frame = ms < 1000 ? "open" : ms < 1130 ? "half" : ms < 1330 ? "closed" : ms < 1460 ? "half" : "open";
++                s.Sprite("eye", frame, (canvas - PixelScene.SpriteWidth("eye", "open") * 2) / 2, 10, 2);
++                s.TextCentered("BLINK!", 86, 3, InkSoft);
++            }
++            else
++            {
++                s = new PixelScene(Mint, canvas);
++                var f = (Int32)(DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond / 450 % 2) == 0 ? "a" : "b";
++                s.Sprite("snail", f, (canvas - PixelScene.SpriteWidth("snail", "a") * 2) / 2, 4, 2);
++                s.TextCentered("SLOW", 62, 3, InkSoft);
++                s.TextCentered("DOWN", 84, 3, InkSoft);
++            }
++
++            return s.Whole(px);
++        }
++
++        // Centres up to four short lines on a 116 px key; the text scale shrinks until the widest line fits.
++        private static void Lines(PixelScene s, String[] lines, BitmapColor color)
++        {
++            if (lines == null || lines.Length == 0)
++            {
++                return;
++            }
++
++            var n = Math.Min(4, lines.Length);
++            var maxScale = n == 1 ? 5 : n == 2 ? 4 : n == 3 ? 4 : 2;
++            var scale = maxScale;
++            for (var i = 0; i < n; i++)
++            {
++                while (scale > 1 && PixelScene.TextWidth(lines[i], scale) > s.Size - 8)
++                {
++                    scale--;
++                }
++            }
++
++            var lineH = 5 * scale;
++            var gap = scale * 2;
++            var total = (n * lineH) + ((n - 1) * gap);
++            var y = Math.Max(2, (s.Size - total) / 2);
++            for (var i = 0; i < n; i++)
++            {
++                s.TextCentered(lines[i], y, scale, color);
++                y += lineH + gap;
++            }
++        }
++
+         // ------------------------------------------------------------ takeover scenes
+         private static PixelScene EyeReminder()
+         {
+diff --git a/plugin/WorkHealthCoachPlugin/tests/Harness/Program.cs b/plugin/WorkHealthCoachPlugin/tests/Harness/Program.cs
+index ae51055..1013a30 100644
+--- a/plugin/WorkHealthCoachPlugin/tests/Harness/Program.cs
++++ b/plugin/WorkHealthCoachPlugin/tests/Harness/Program.cs
+@@ -43,6 +43,22 @@ if (args.Length == 2 && args[0] == "--render")
+     Save("reminder_speak_up", KeypadScreen.Build());
+     SessionState.OnTrigger(new TriggerMessage("break_over", 1.0));
+     Save("reminder_break_over", KeypadScreen.Build());
++    // one Desk Coach widget key while an alert is active (every widget key draws this)
++    void SaveKey(String name)
++    {
++        var img = KeypadScreen.AlertKey(116);
++        Console.WriteLine($"{name}: {(img == null ? "NO ALERT" : img.SaveToFile(Path.Combine(args[1], name + ".png")))}");
++    }
++
++    SessionState.DismissAlert();
++    foreach (var (t, n) in new[] { ("person_behind", "key_behind"), ("break_due", "key_break_due"), ("speak_up", "key_speak_up"), ("break_over", "key_break_over"),
++                                   ("blink_low", "key_blink"), ("pace_too_fast", "key_pace"), ("time_warning", "key_time") })
++    {
++        SessionState.OnTrigger(new TriggerMessage(t, 1.0));
++        SaveKey(n);
++        SessionState.DismissAlert();
++    }
++
+     return 0;
+ }
+ 
+@@ -574,7 +590,7 @@ try
+ 
+     UiSettings.Set("""{"master":true,"profile":"everyday","muted":[],"features":{"speed":{"enabled":true},"volume":{"enabled":true},"blink":{"enabled":true},"pomodoro":{"enabled":false},"distance":{"enabled":true},"behind":{"enabled":true}}}""", out _);
+     var baseline = Snapshot();
+-    Check("there are 8 keys", FeatureToggleCommand.AllKeys.Length == 8);
++    Check("there are 9 keys (8 switches + the Alert light)", FeatureToggleCommand.AllKeys.Length == 9);
+     Check("all key images draw", baseline.Values.All(b => b.Length > 100));
+     Check("different keys look different", baseline["speed"].SequenceEqual(baseline["volume"]) == false);
+ 
+@@ -644,6 +660,16 @@ try
+     NotificationPolicy.Evaluate(new TriggerMessage("break_due", 1.0, true));
+     SessionState.OnTrigger(new TriggerMessage("break_due", 1.0), new TriggerRule { KeypadColor = "#123456" });
+     Check("generic reminder scene draws", SessionState.GenericActive && KeypadScreen.Build().Tile(0, 0, 116) != null);
++    SessionState.DismissAlert();
++    Check("widget keys draw nothing special without an alert", KeypadScreen.AlertKey(116) == null);
++    foreach (var t in new[] { "person_behind", "break_due", "speak_up", "blink_low", "pace_too_fast", "time_warning" })
++    {
++        SessionState.OnTrigger(new TriggerMessage(t, 1.0));
++        Check($"widget keys draw the alert for {t}", KeypadScreen.AlertKey(116) != null && KeypadScreen.AlertKey(80) != null);
++        SessionState.DismissAlert();
++    }
++
++    Check("a dismissed alert leaves the widget keys alone", !SessionState.TakeoverActive && KeypadScreen.AlertKey(116) == null);
+ }
+ catch (Exception ex)
+ {
+-- 
+2.43.0
+
